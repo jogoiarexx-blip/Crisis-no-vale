@@ -91,8 +91,8 @@ export const AREAS = [
     encounters: [
       { id: 'ruinas-ambush', on: 'enter', first: true, delay: 1.2, msg: 'EMBOSCADA! Raptores no corredor!',
         spawn: [{ type: 'raptor', x: -4, z: 4 }, { type: 'raptor', x: 4, z: 6, delay: 0.5 }, { type: 'raptor', from: 'S', delay: 4 }] },
-      { id: 'ruinas-return', on: 'enter', flag: 'power', msg: 'A matilha voltou para as ruínas!',
-        spawn: [{ type: 'raptor', from: 'N' }, { type: 'raptor', from: 'N', delay: 0.6 }, { type: 'spitter', x: 5, z: -10, delay: 1.5 }] },
+      { id: 'ruinas-return', on: 'enter', flag: 'power', revisitFrom: 'lab', warning: 'Rugidos na mata — o alarme atraiu predadores às ruínas!',
+        spawn: [{ type: 'raptor', from: 'S' }, { type: 'raptor', from: 'S', delay: 0.6 }, { type: 'spitter', from: 'S', delay: 1.5 }] },
     ],
     build(ctx) {
       const b = this.bounds, rng = ctx.rng;
@@ -146,8 +146,8 @@ export const AREAS = [
     logs: [{ id: 'log3', x: 21.5, z: 17, yaw: -Math.PI / 2 }, { id: 'log5', x: -20.4, z: 15.4, yaw: Math.PI / 2 }],
 
     encounters: [
-      { id: 'lab-return', on: 'enter', flag: 'power', msg: 'Os alarmes atraíram uma matilha!',
-        spawn: [{ type: 'raptor', from: 'W' }, { type: 'raptor', from: 'E', delay: 0.4 }, { type: 'raptor', from: 'N', delay: 1.2 }, { type: 'spitter', from: 'E', delay: 2 }, { type: 'raptor', from: 'W', delay: 3 }] },
+      { id: 'lab-return', on: 'enter', flag: 'power', revisitFrom: 'pantano', warning: 'Sirene ativa — rugidos se aproximam pelo complexo!',
+        spawn: [{ type: 'raptor', from: 'E' }, { type: 'raptor', from: 'N', delay: 0.8 }, { type: 'spitter', from: 'E', delay: 1.8 }] },
       // v5: "Protocolo da diretoria" — ao entrar na sala do Brandt, a porta blindada bate e o alarme chama a matilha
       // (beat roteirizado em director.js → BEAT.lockdown; os spawns ficam esperando no corredor quando a porta reabre)
       { id: 'lab-lockdown', on: 'zone', flag: 'power', zone: { x: -17, z: 14.4, r: 2 }, beat: 'lockdown',

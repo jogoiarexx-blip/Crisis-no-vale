@@ -6,6 +6,7 @@ import { captureEncounterMemory, restoreEncounterMemory } from './encounter-memo
 import { G, writeSave, readSave, addEp } from './state.js';
 import { normalizeStreak, finishStreak } from './clean-streak.mjs';
 import { safeDoorArrival } from './door-safety.mjs';
+import { canTriggerRevisit, scheduleRevisit, rearmPendingWarnings } from './revisit-encounters.mjs';
 import { AREAS, AREA, doorArrival, buildArea, unloadArea, isBuilt, neighbors, onAreaBuilt } from './areas.js';
 import { quality } from './quality.js';
 import { idle } from './idle.js';
@@ -142,7 +143,7 @@ function spawnAreaContents(a) {
     e.phaseIdx = Number.isInteger(m.phaseIdx) ? m.phaseIdx : 0;
     if (e.cfg.boss) D.boss = e;
   }
-  D.queue = memory.pending;
+  D.queue = rearmPendingWarnings(memory.pending);
   a.pickups.forEach((p) => { if (!s.taken.includes(p.id)) spawnPickup(p.kind, p.x, p.z, { id: p.id, y: p.kind === 'shotgun' ? 1.15 : p.kind === 'crate' ? 0.32 : 0.6 }); });
 }
 function setupSurvivor(a) {
@@ -203,7 +204,7 @@ export function enterArea(id, doorId, at) {
   // v7: primeira vez na margem = começa o Ato 2 (o resgate do penhasco deixa de valer)
   if (id === 'margem' && !F.act2) { F.act2 = true; ui.banner('ATO 2 — RIO ABAIXO', a.sub, 3.4); setTimeoutGame(0.6, () => cardWhenFree(story.ACT2_INTRO)); }
   // encontros de entrada
-  for (const e of a.encounters) if (e.on === 'enter' && canFire(e, first)) fireEncounter(e);
+  for (const e of a.encounters) if (e.on === 'enter' && (e.revisitFrom ? canTriggerRevisit(e, { from: prev?.id, first, flags: F, fired: D.enc }) : canFire(e, first))) fireEncounter(e);
   D.mapDirty = true;
 }
 function canFire(e, first) {
@@ -214,6 +215,7 @@ function canFire(e, first) {
 }
 function fireEncounter(e) {
   D.enc.add(e.id);
+  if (e.revisitFrom) { D.queue.push(...scheduleRevisit(e)); return; }
   const base = e.delay || 0;
   if (e.boss && D.area.id === 'ninho') { F.nestFight = true; syncGates(D.area, false); setTimeoutGame(base + 1.5, () => story.say(story.LINES.nest_start, 'nest_start', true)); }
   else if (e.boss) { F.bossFight = true; syncGates(D.area, false); setTimeoutGame(base + 1.5, () => story.say(story.LINES.boss_start, 'boss_start', true)); }
@@ -770,6 +772,7 @@ export function updateDirector(dt) {
   for (let i = D.queue.length - 1; i >= 0; i--) {
     const q = D.queue[i]; q.t -= dt; if (q.t > 0) continue;
     D.queue.splice(i, 1);
+    if (q.kind === 'revisit-cue') { ui.announce(q.message, '#ffb070'); sfx.siren(); sfx.stinger('ambush'); continue; }
     const e = q.x !== undefined ? spawnEnemy(q.type, q.x, q.z) : spawnEnemy(q.type, undefined, undefined, { from: q.from });
     if (q.fx === 'egg') { burst(e.pos.x, 0.8, e.pos.z, 'spit', 18, 3); shockwave(e.pos.x, e.pos.z, 1.8, 0x40ff80); sfx.mudBurst(); }
     if (q.fx === 'mud') { burst(e.pos.x, 0.3, e.pos.z, 'dust', 26, 4.5); decal(e.pos.x, e.pos.z, 2.6, 0x1a1408); shockwave(e.pos.x, e.pos.z, 2.2, 0x8a7a50); sfx.mudBurst(); G.shake = Math.max(G.shake, 0.3); }

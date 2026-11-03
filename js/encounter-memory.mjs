@@ -1,7 +1,7 @@
 // Estado leve dos inimigos entre trocas de área e saves (sem objetos Three.js).
 const validPoint = (p) => p && Number.isFinite(p.x) && Number.isFinite(p.z);
 const validLiving = (e) => e && typeof e.type === 'string' && validPoint(e.pos || e);
-const validPending = (q) => q && typeof q.type === 'string' && Number.isFinite(q.t ?? 0);
+const validPending = (q) => q && (typeof q.type === 'string' || (q.kind === 'revisit-cue' && typeof q.encounterId === 'string')) && Number.isFinite(q.t ?? 0);
 const copyPoint = (p) => validPoint(p) ? { x: p.x, z: p.z } : null;
 
 export function captureEncounterMemory(enemies = [], queue = []) {
