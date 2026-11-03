@@ -233,3 +233,10 @@ v7: o save é `v: 3` (flags da campanha); saves antigos são migrados. `__game.s
 - Ao mudar de área ou salvar num terminal, posições, HP e estado de alerta dos sobreviventes são lembrados. Os mortos não voltam. Aparições programadas ainda pendentes voltam na próxima visita, evitando desaparecimento por atravessar uma porta rapidamente.
 - Ondas de eventos canceláveis (gerador e terminal) não sobrevivem à interrupção do evento. Saves antigos sem memória de inimigos continuam aceitos, usando a composição inicial da área e os abates registrados.
 - Testes puros: `node --test tests/coherence.test.mjs` (requer Node.js moderno; não executa WebGL).
+
+## Atualização: escolta e navegação (novembro de 2026)
+
+- A Dra. Lima contorna obstáculos do pátio com A* 2D e os colisores reais da área. A velocidade da animação segue o deslocamento efetivo, evitando passos no lugar.
+- A posição, resistência e escolta são preservadas ao sair e voltar ao pátio ou carregar um salvamento; emboscadas já disparadas não reiniciam.
+- O código de abertura do heliponto não pode ser interrompido atravessando outra porta durante seus 4 segundos.
+- Testes de rota em `tests/escort.test.mjs` e verificações de sintaxe no GitHub Actions.

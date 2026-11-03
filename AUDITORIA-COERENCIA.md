@@ -53,3 +53,11 @@ Preservar o jogo e seus eventos existentes; alinhar escolha do jogador, roteiro,
 Foi criada a especificação **[PLANO-MUNDO-COERENTE.md](PLANO-MUNDO-COERENTE.md)**, baseada na inspeção de nove áreas, portas/condições, treze documentos, encontros e combo atual de 2,5 segundos. Prioridades: P0 transições com debounce/posicionamento e animação; P0 documentos coerentes e persistentes; P0 backtracking com novos encontros por evento sem reviver mortos; P0 combo de abates sem golpe por trecho com bônus único ao cruzar para a próxima área; P1 ambientação e mapa. O **[PROMPT-IMPLEMENTACAO-MUNDO.md](PROMPT-IMPLEMENTACAO-MUNDO.md)** contém a instrução integral para um agente implementar e testar o plano.
 
 **Status:** somente documentação atualizada nesta revisão. Não declarar as funcionalidades novas implementadas nem as travessias certificadas sem código e testes reproduzidos.
+
+
+## Escolta e backtracking — revisão
+
+- **Antes:** a Dra. Lima seguia em linha reta e `resolve()` apenas empurrava para fora dos obstáculos. Ao sair do pátio, a missão apagava os flags de escolta e os encontros disparados, e a personagem retornava à cabine.
+- **Depois:** A* sobre AABB/círculos; waypoints suavizados somente em linha livre; replanejamento limitado; animação vinculada aos metros realmente percorridos. O estado da NPC fica no save e no retorno ao pátio, sem repetições de ondas.
+- **Consistência:** bloqueio temporário das portas enquanto Lima digita o código, e início do código apenas quando ela está de pé.
+- **Validação:** teste automatizado de desvio de obstáculos já incluído. Testes completos no navegador para percurso real até o terminal continuam pendentes.

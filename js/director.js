@@ -11,7 +11,7 @@ import { player, placePlayer, snapshotBag, restoreBag, resetPlayer } from './pla
 import { openTerminal } from './shop.js';
 import { enemies, spawnEnemy, clearEnemies, enemyEvents, makeNoise } from './enemies.js';
 import { spawnPickup, clearPickups, combatEvents, resetCombat } from './combat.js';
-import { survivor, resetSurvivor, hideSurvivor, reviveSurvivor } from './npc.js';
+import { survivor, resetSurvivor, restoreSurvivor, snapshotSurvivor, hideSurvivor, reviveSurvivor, resumeEscort } from './npc.js';
 import { clearFx, burst, decal, shockwave } from './fx.js';
 import { sfx } from './audio.js';
 import * as ui from './ui.js';
@@ -32,6 +32,7 @@ export const D = {
   lockdown: null,       // v5: sala da diretoria trancada { t, flashT }
   brandtT: 0,           // v7: segundos até o barco do Brandt ligar (depois da Matriarca)
   fuse: 0,              // v7: pavio das cargas no ninho
+  survivorMemory: null, // cópia de estado da doutora entre visitas e saves
 };
 const F = D.flags;
 const CONTROL_SPOT = { x: 19.6, z: -16 };
@@ -42,7 +43,7 @@ function resetCampaign() {
   D.enc = new Set(); D.visited = new Set(); D.queue = []; D.trans = null; D.event = null; D.boss = null; D.objectives = 0;
   D.heli = null; D.barkT = 12; D.wasDown = false; D.talkI = 0;
   if (D.lockdown) endLockdown(true); D.lockdown = null;
-  D.brandtT = 0; D.fuse = 0; hideBrandt();
+  D.brandtT = 0; D.fuse = 0; D.survivorMemory = null; hideBrandt();
 }
 
 // ---------- sala da diretoria (laboratório): porta blindada que abre com a energia ----------
@@ -144,10 +145,14 @@ function spawnAreaContents(a) {
 }
 function setupSurvivor(a) {
   if (a.id !== 'patio') { hideSurvivor(); return; }
+  survivor.name = a.survivor.name;
   if (F.heliCode) { resetSurvivor(CONTROL_SPOT.x, CONTROL_SPOT.z, true); return; }
-  // saiu do pátio no meio da escolta: ela volta para a cabine e a escolta recomeça
-  if (F.escort) { F.escort = false; D.enc.delete('escort-1'); D.enc.delete('escort-2'); }
-  resetSurvivor(a.survivor.x, a.survivor.z, true); survivor.name = a.survivor.name;
+  if (F.escort && D.survivorMemory) {
+    restoreSurvivor(D.survivorMemory, a.survivor);
+    if (!survivor.goal) resumeEscort();
+    return;
+  }
+  resetSurvivor(a.survivor.x, a.survivor.z, true);
 }
 function syncGates(a, instant) {
   for (const d of a.doors) {
@@ -162,7 +167,10 @@ function syncGates(a, instant) {
 /** Entra na área `id`. Vindo por uma porta (doorId da área de destino) ou num ponto fixo (at). */
 export function enterArea(id, doorId, at) {
   const a = AREA[id], prev = D.area;
-  if (prev) rememberAreaThreats(prev);
+  if (prev) {
+    rememberAreaThreats(prev);
+    if (prev.id === 'patio' && survivor.visible) D.survivorMemory = snapshotSurvivor();
+  }
   // streaming: se a área foi descarregada (ou ainda não foi construída), constrói agora — sob a tela preta da transição
   if (!isBuilt(a)) { const ms = buildArea(a); streamStats.syncBuilds++; streamStats.lastSyncMs = Math.round(ms); }
   if (D.event && (D.event.kind !== 'rescue' || prev !== a)) D.event = null; // sair da área cancela gerador/código/resgate
@@ -406,7 +414,14 @@ function checkDoors(dt) {
       if (D.lockMsgT <= 0) { ui.feed(LOCK_MSG[d.lock], '#ff8a70'); D.lockMsgT = 2; }
       return;
     }
-    if (D.event && D.event.kind === 'gen') { pushBack(d); ui.feed('Termine de ligar o gerador!', '#ffb070'); return; }
+    if (D.event && (D.event.kind === 'gen' || D.event.kind === 'code')) {
+      pushBack(d);
+      if (D.lockMsgT <= 0) {
+        ui.feed(D.event.kind === 'code' ? 'Espere a Dra. Lima terminar o código!' : 'Termine de ligar o gerador!', '#ffb070');
+        D.lockMsgT = 2;
+      }
+      return;
+    }
     startTransition(d); return;
   }
 }
@@ -592,7 +607,7 @@ export function interact() {
   else if (it.kind === 'generator' && !F.power && !D.event) startGenerator(it);
   else if (it.kind === 'control' && !F.heliCode) ui.feed(`Traga a ${survivor.name} até aqui`, '#ffb070');
   else if (it.kind === 'survivor') {
-    survivor.following = true; F.escort = true;
+    resumeEscort(); F.escort = true; D.survivorMemory = null;
     ui.banner(survivor.name.toUpperCase(), 'Escolte-a até o terminal de controle (nordeste)', 3.2);
     story.clearSpeech(); story.say(story.LINES.greet); D.barkT = 14;
     sfx.objective(); D.mapDirty = true;
@@ -645,7 +660,9 @@ function saveGame(term) {
     // v7: v3 — corrige o save v2, que perdia flags/estado das áreas/encontros (estavam dentro de um comentário)
     // v10: v4 — Pontos de Extinção (ep/epTotal) e upgrades da loja (bag.up)
     v: 4, area: a.id, at, ep: G.ep, epTotal: G.epTotal,
-    flags: { ...F, escort: false, bossFight: false, nestFight: false }, st: D.st, enc: [...D.enc].filter((x) => !x.startsWith('escort')),
+    flags: { ...F, escort: !!F.escort, bossFight: false, nestFight: false },
+    survivor: a.id === 'patio' ? snapshotSurvivor() : D.survivorMemory,
+    st: D.st, enc: [...D.enc],
     bag: snapshotBag(), objectives: D.objectives, story: story.storySave(),
     stats: { score: G.score, kills: G.kills, shots: G.shots, hits: G.hits, elapsed: G.elapsed, saves: G.saves },
   };
@@ -666,6 +683,7 @@ export function startCampaign(fromSave) {
   if (s && !AREA[s.area]) { console.warn('save com área desconhecida — ignorado'); return startCampaign(false); }
   if (s) {
     Object.assign(F, s.flags || {});
+    D.survivorMemory = s.survivor || null;
     for (const id in s.st || {}) if (D.st[id]) Object.assign(D.st[id], s.st[id]);
     (s.enc || []).forEach((x) => D.enc.add(x));
     // v7: migração de saves v1/v2 (sem flags): deduz o progresso pela área do terminal
@@ -767,7 +785,7 @@ export function updateDirector(dt) {
   // escolta: chegou ao terminal de controle
   if (a.id === 'patio' && F.escort && !F.heliCode && !D.event && survivor.following) {
     const z = a.controlZone;
-    if (Math.hypot(survivor.pos.x - z.x, survivor.pos.z - z.z) < z.r + 0.8) {
+    if (survivor.downT <= 0 && Math.hypot(survivor.pos.x - z.x, survivor.pos.z - z.z) < z.r + 0.8) {
       survivor.following = false; survivor.goal = { ...CONTROL_SPOT };
       D.event = { kind: 'code', t: 0, dur: 4, x: z.x, z: z.z, range: 99 };
       ui.feed(`${survivor.name} está digitando o código...`, '#a0ffb0');
