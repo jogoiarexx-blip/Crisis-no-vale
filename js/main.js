@@ -10,6 +10,7 @@ import { pollGamepad, pad } from './gamepad.js';
 import { updateFx, clearFx } from './fx.js';
 import { heroReady, heroInfo, selectHero, player, bag, events, resetPlayer, updatePlayer, updateCamera, menuCamera, switchWeapon, startReload, arms, curWeapon, useMed, weapons, medMax, grenadeMax, applyUpgrades } from './player.js';
 import { terminalKey, terminalOpen } from './shop.js';
+import { openArchive, archiveKey } from './archive.js';
 import { enemies, spawnEnemy, updateEnemies, clearEnemies, prewarmEnemies, poolStats } from './enemies.js';
 import { fire, throwGrenade, updateCombat, clearPickups, pickups, damageEnemy } from './combat.js';
 import { updateSurvivor, hideSurvivor, survivor } from './npc.js';
@@ -97,6 +98,7 @@ function cycleWeapon(dir) {
 // ---------- entrada ----------
 const inputHandlers = {
   onKey(code) {
+    if (G.state === 'archive') { archiveKey(code); return; }
     if (G.state === 'terminal') { terminalKey(code); if (code === 'KeyM') ui.feed(ui.STR.muted(toggleMute()), '#cde'); return; } // v10: Terminal TELLUS
     if (G.state === 'story') {
       if (code === 'Space' || code === 'KeyE') story.advanceCard();
@@ -117,11 +119,7 @@ const inputHandlers = {
       if (code === 'Digit3') { if (bag.owned[2]) switchWeapon(2); else ui.feed('Você ainda não tem a submetralhadora', '#a09070'); }
       if (code === 'KeyQ') cycleWeapon(1);
       if (code === 'KeyE') { if (ui.mapOpen()) ui.toggleMap(false); else interact(); }
-      if (code === 'KeyJ' && !D.trans) {
-        const ids = story.LOG_IDS.filter((id) => story.S.logs.has(id));
-        if (ids.length) story.showCard(ids.flatMap((id) => story.logPages(id)));
-        else ui.feed('Arquivo vazio — encontre registros pelo vale', '#9fe8ff');
-      }
+      if (code === 'KeyJ') { if (ui.mapOpen()) ui.toggleMap(false); openArchive(); }
       if (code === 'KeyG') throwGrenade();
       if (code === 'KeyH') useMed();
       if (code === 'Tab') ui.toggleMap(!ui.mapOpen());
@@ -206,7 +204,7 @@ function loop() {
   G.surface = D.area ? D.area.id : '';
   const inGame = G.state !== 'menu' && G.state !== 'loading' && D.area;
   if (inGame) { const [k, m] = ambienceNow(); setAmbience(k, m); } else setAmbience('menu');
-  setMuffle(G.state === 'pause' || G.state === 'story' || G.state === 'terminal');
+  setMuffle(G.state === 'pause' || G.state === 'story' || G.state === 'terminal' || G.state === 'archive');
   if (G.state === 'menu' || story.cinematic()) menuCamera(dt); else if (G.state !== 'pause') updateCamera(dt);
   // Pequeno enquadramento, sem geometrias ou luzes adicionais.
   if (G.state === 'play' && D.trans?.sceneActive && !SETTINGS.reducedMotion) {

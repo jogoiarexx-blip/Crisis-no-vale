@@ -226,3 +226,13 @@ body.rm .term-box{animation:none!important}
 #passageSkip{pointer-events:auto;font-size:11px;letter-spacing:1px;padding:8px 12px;margin:0;white-space:nowrap;background:#14261a}
 #pause{z-index:10}
 @media(max-width:640px){#passageScene .passage-bottom{display:block;padding-top:18px}#passageSkip{margin-top:8px}}
+
+#archive{z-index:7}
+.archive-box{max-width:720px;text-align:left}
+.archive-box h2{color:#d4ebc4;letter-spacing:3px;margin:8px 0}
+.archive-list{max-height:47vh;overflow-y:auto;display:grid;gap:6px;overscroll-behavior:contain}
+.archive-entry{width:100%;margin:0;padding:10px 12px;text-align:left;letter-spacing:0;font-size:14px;background:#111e18;border-color:#345343}
+.archive-entry.on{border-color:#8edf9c;background:#203b29}
+.archive-entry strong,.archive-entry span{display:block}
+.archive-entry span{font-size:12px;font-weight:normal;color:#b6c5bb;margin-top:3px}
+#archiveClose{font-size:12px;padding:10px 14px}

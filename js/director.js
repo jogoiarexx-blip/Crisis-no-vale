@@ -1,8 +1,9 @@
 // director.js — progressão por ÁREAS (no lugar das ondas): portas e travas, estado de cada área,
 // encontros roteirizados, gerador, escolta, chefe, resgate, objetivos e terminais de save.
-import { activateArea, bounds, boxes, setDoorLight, setPower, atmo, spots, bossGlow, flashAt } from './world.js';
+import { activateArea, bounds, boxes, castWorld, setDoorLight, setPower, atmo, spots, bossGlow, flashAt } from './world.js';
 import { WORLD, SCORE, PLAYER, EP, ENEMY_TYPES } from './config.js';
 import { captureEncounterMemory, restoreEncounterMemory } from './encounter-memory.mjs';
+import { canAccessRecord, canSeeRecord } from './archive-model.mjs';
 import { G, writeSave, readSave, addEp } from './state.js';
 import { normalizeStreak, finishStreak } from './clean-streak.mjs';
 import { safeDoorArrival } from './door-safety.mjs';
@@ -595,7 +596,9 @@ function nearestInteract() {
   let best = null, bd = 2.4;
   for (const it of interactables()) {
     const d = Math.hypot(it.x - player.pos.x, it.z - player.pos.z) - (it.near ? it.near - 2.4 : 0); // levantar a Lima tem alcance maior
-    if (d < bd) { bd = d; best = it; }
+    if (d >= bd) continue;
+    if (it.kind === 'log' && (!canAccessRecord(it.l.id, F, D.lockdown) || !canSeeRecord(player.pos, it, castWorld))) continue;
+    bd = d; best = it;
   }
   return best;
 }
