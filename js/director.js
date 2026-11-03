@@ -1,7 +1,8 @@
 // director.js — progressão por ÁREAS (no lugar das ondas): portas e travas, estado de cada área,
 // encontros roteirizados, gerador, escolta, chefe, resgate, objetivos e terminais de save.
 import { activateArea, bounds, boxes, setDoorLight, setPower, atmo, spots, bossGlow, flashAt } from './world.js';
-import { WORLD, SCORE, PLAYER, EP } from './config.js';
+import { WORLD, SCORE, PLAYER, EP, ENEMY_TYPES } from './config.js';
+import { captureEncounterMemory, restoreEncounterMemory } from './encounter-memory.mjs';
 import { G, writeSave, readSave, addEp } from './state.js';
 import { AREAS, AREA, doorArrival, buildArea, unloadArea, isBuilt, neighbors, onAreaBuilt } from './areas.js';
 import { quality } from './quality.js';
@@ -19,7 +20,7 @@ import * as story from './story.js';
 import { brandt, showBrandt, hideBrandt, brandtRun, brandtCower, brandtCaught } from './brandt.js';
 
 // ---------- estado da campanha ----------
-const freshArea = () => ({ visited: false, dead: [], taken: [] });
+const freshArea = () => ({ visited: false, dead: [], taken: [], living: null, pending: [] });
 export const D = {
   area: null, flags: {}, st: {}, enc: new Set(), visited: new Set(),
   queue: [],            // spawns pendentes [{t, type, x, z, from}]
@@ -118,9 +119,26 @@ function objectiveAct2() {
 }
 
 // ---------- troca de área ----------
+function rememberAreaThreats(a) {
+  if (!a || !D.st[a.id]) return;
+  Object.assign(D.st[a.id], captureEncounterMemory(enemies, D.queue));
+}
 function spawnAreaContents(a) {
-  const s = D.st[a.id];
-  a.ambient.forEach((m, i) => { if (!s.dead.includes(i)) spawnEnemy(m.type, m.x, m.z, { alert: false, ambientIdx: i }); });
+  const s = D.st[a.id], memory = restoreEncounterMemory(s, a.ambient);
+  for (const m of memory.living) {
+    if (!ENEMY_TYPES[m.type] || !Number.isFinite(m.x) || !Number.isFinite(m.z)) continue;
+    // Restaura sem rugido/partículas extras: o dinossauro nunca deixou o cenário.
+    const e = spawnEnemy(m.type, m.x, m.z, { alert: false, ambientIdx: Number.isInteger(m.ambientIdx) ? m.ambientIdx : undefined });
+    e.hp = Math.min(e.maxHp, Math.max(1, Number.isFinite(m.hp) ? m.hp : e.maxHp));
+    if (Number.isFinite(m.yaw)) e.yaw = m.yaw;
+    if (m.home && Number.isFinite(m.home.x) && Number.isFinite(m.home.z)) e.home = { ...m.home };
+    e.alert = !!m.alert; e.alertT = Number.isFinite(m.alertT) ? m.alertT : 0;
+    e.lastSeen = m.lastSeen && Number.isFinite(m.lastSeen.x) && Number.isFinite(m.lastSeen.z) ? { ...m.lastSeen } : { ...e.home };
+    e.investigate = m.investigate && Number.isFinite(m.investigate.x) && Number.isFinite(m.investigate.z) ? { ...m.investigate } : null;
+    e.phaseIdx = Number.isInteger(m.phaseIdx) ? m.phaseIdx : 0;
+    if (e.cfg.boss) D.boss = e;
+  }
+  D.queue = memory.pending;
   a.pickups.forEach((p) => { if (!s.taken.includes(p.id)) spawnPickup(p.kind, p.x, p.z, { id: p.id, y: p.kind === 'shotgun' ? 1.15 : p.kind === 'crate' ? 0.32 : 0.6 }); });
 }
 function setupSurvivor(a) {
@@ -143,6 +161,7 @@ function syncGates(a, instant) {
 /** Entra na área `id`. Vindo por uma porta (doorId da área de destino) ou num ponto fixo (at). */
 export function enterArea(id, doorId, at) {
   const a = AREA[id], prev = D.area;
+  if (prev) rememberAreaThreats(prev);
   // streaming: se a área foi descarregada (ou ainda não foi construída), constrói agora — sob a tela preta da transição
   if (!isBuilt(a)) { const ms = buildArea(a); streamStats.syncBuilds++; streamStats.lastSyncMs = Math.round(ms); }
   if (D.event && (D.event.kind !== 'rescue' || prev !== a)) D.event = null; // sair da área cancela gerador/código/resgate
@@ -439,7 +458,7 @@ function updateEvent(dt) {
   else if ((E.warnT -= dt) <= 0) { ui.feed(E.warn || WARN[E.kind] || 'Volte!', '#ffb070'); E.warnT = 2; }
   while (E.bursts && E.bi < E.bursts.length && E.t >= E.bursts[E.bi]) {
     const W = (E.waves || WAVES[E.kind])[E.bi++];
-    W.forEach((s) => D.queue.push({ ...s, t: s.delay || 0 }));
+    W.forEach((s) => D.queue.push({ ...s, t: s.delay || 0, eventKind: E.kind }));
   }
   if (E.kind === 'rescue') {
     if (!E.s1 && E.t > 4) { E.s1 = true; story.say(story.LINES[E.lines ? E.lines[0] : 'rescue_mid']); }
@@ -609,7 +628,7 @@ function readLog(id) {
 /** v10: terminal travado em evento, troca de área, chefe, sala trancada, pavio ou inimigo em alerta a < EP.DANGER_R. */
 function terminalDanger() {
   if (D.event || D.trans || D.boss || F.bossFight || F.nestFight || D.lockdown || D.fuse > 0 || D.queue.length) return true;
-  for (const e of enemies) if (!e.dead && e.alert && Math.hypot(e.pos.x - player.pos.x, e.pos.z - player.pos.z) < EP.DANGER_R) return true;
+  for (const e of enemies) if (!e.dead && (e.alert || e.investigate) && Math.hypot(e.pos.x - player.pos.x, e.pos.z - player.pos.z) < EP.DANGER_R) return true;
   return false;
 }
 
@@ -617,6 +636,7 @@ function terminalDanger() {
 function saveGame(term) {
   player.hp = PLAYER.HP; G.saves++;
   const a = D.area;
+  rememberAreaThreats(a); // incluir posição, vida e busca dos inimigos no save
   const off = 1.6, yaw = term.group.rotation.y;
   const at = { x: term.x + Math.sin(yaw) * off, z: term.z + Math.cos(yaw) * off, yaw: yaw + Math.PI };
   const data = {

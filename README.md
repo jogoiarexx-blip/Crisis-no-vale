@@ -224,3 +224,12 @@ No console, `__game` expõe o estado (`area`, `flags`, `objective`, `hp`, `enemi
 Os saves antigos continuam compatíveis: o campo `story` (registros lidos e falas já ditas) é opcional e os saves `v: 1` (v5, duas armas) são migrados ao carregar. v6: `__game.SETTINGS`, `__game.setSetting(k, v)`, `__game.switchWeapon(i)`, `__game.cycleWeapon(±1)`, `__game.bag` (armas, colete) e `__game.story.ending()`.
 
 v7: o save é `v: 3` (flags da campanha); saves antigos são migrados. `__game.setFlags({...})`, `__game.brandt` e `__game.goto('margem' | 'acampamento' | 'ninho')`.
+
+
+## Revisão de coerência — IA e backtracking (03/11/2026)
+
+- Os dinossauros patrulham, investigam barulhos e só confirmam a posição de Marina quando têm linha de visão (com campo visual para os desatentos). Parede também reduz o alcance auditivo.
+- Ao perder o contato visual, perseguem a última posição conhecida por alguns segundos e depois investigam/retomam a patrulha. Mordidas, cuspes e ondas de choque não atravessam paredes sólidas.
+- Ao mudar de área ou salvar num terminal, posições, HP e estado de alerta dos sobreviventes são lembrados. Os mortos não voltam. Aparições programadas ainda pendentes voltam na próxima visita, evitando desaparecimento por atravessar uma porta rapidamente.
+- Ondas de eventos canceláveis (gerador e terminal) não sobrevivem à interrupção do evento. Saves antigos sem memória de inimigos continuam aceitos, usando a composição inicial da área e os abates registrados.
+- Testes puros: `node --test tests/coherence.test.mjs` (requer Node.js moderno; não executa WebGL).

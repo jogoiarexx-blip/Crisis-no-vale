@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { scene, camera, resolve, castWorld, freeSpot, bounds, GLOW, flashAt, onMaterialsReset } from './world.js';
 import { ENEMY_TYPES, COLORS } from './config.js';
+import { AI_MEMORY_SECONDS, AI_INVESTIGATE_SECONDS, canHearNoise, canSeeTarget } from './perception.mjs';
 import { G } from './state.js';
 import { player, hurtPlayer } from './player.js';
 import { survivor, hurtSurvivor } from './npc.js';
@@ -201,20 +202,37 @@ export function spawnEnemy(type, x, z, opts = {}) {
   const T = ENEMY_TYPES[type], parts = acquireParts(type);
   const alert = opts.alert !== false;
   const e = Object.assign({ parts }, parts, {
-    type, cfg: T, pos: new THREE.Vector3(x, 0, z), home: { x, z }, hp: T.hp, maxHp: T.hp, yaw: Math.atan2(player.pos.x - x, player.pos.z - z),
+    type, cfg: T, pos: new THREE.Vector3(x, 0, z), home: { x, z }, hp: T.hp, maxHp: T.hp,
+    yaw: alert ? Math.atan2(player.pos.x - x, player.pos.z - z) : Math.random() * Math.PI * 2,
     atkCd: 1, special: rand(1, 3), stun: 0, flashT: 0, bite: 0, lunge: 0, spitT: 0, windup: 0, charge: 0, cdx: 0, cdz: 0,
-    stomp: 0, stompCd: 3, phaseIdx: 0, alert, dmg0: G.dmgTaken || 0, wanderA: Math.random() * 6.28, ambientIdx: opts.ambientIdx,
+    stomp: 0, stompCd: 3, phaseIdx: 0, alert, alertT: alert ? AI_MEMORY_SECONDS : 0,
+    lastSeen: { x: player.pos.x, z: player.pos.z }, investigate: null,
+    dmg0: G.dmgTaken || 0, wanderA: Math.random() * 6.28, ambientIdx: opts.ambientIdx,
     kx: 0, kz: 0, phase: 0, seed: Math.random() * 100, flank: (Math.random() < 0.5 ? -1 : 1) * rand(0.3, 0.8), dead: false, deadT: 0, fallDir: 1, remove: false,
   });
   e.g.position.copy(e.pos); e.g.rotation.y = e.yaw; scene.add(e.g); scene.add(e.bar); enemies.push(e);
   if (alert) { burst(x, 0.3, z, 'dust', 10, 2); roar(T.shape === 'brute' ? (T.boss ? 0.35 : 0.55) : T.shape === 'spitter' ? 1.3 : 1.6, T.shape === 'brute' ? 0.35 : 0.12); }
   return e;
 }
-/** Barulho (tiro/explosão) acorda inimigos em patrulha num raio. */
+/** Barulho gera investigação; só visão/contato confirma a localização da Marina. */
 export function makeNoise(x, z, r) {
-  for (const e of enemies) if (!e.dead && !e.alert && Math.hypot(e.pos.x - x, e.pos.z - z) < r) alertEnemy(e);
+  for (const e of enemies) {
+    if (e.dead) continue;
+    const d = Math.hypot(e.pos.x - x, e.pos.z - z);
+    if (d > r || d < 0.001 && !canHearNoise(d, r)) continue;
+    const obstructed = d > 0.01 && castWorld(e.pos.x, e.pos.z, (x - e.pos.x) / d, (z - e.pos.z) / d, d, 1.5) < d - 0.5;
+    if (!canHearNoise(d, r, obstructed)) continue;
+    if (e.alert) { e.lastSeen = { x, z }; e.alertT = AI_MEMORY_SECONDS; }
+    else { e.investigate = { x, z, t: AI_INVESTIGATE_SECONDS }; e.wanderA = Math.atan2(x - e.pos.x, z - e.pos.z); }
+  }
 }
-function alertEnemy(e) { if (e.alert) return; e.alert = true; e.special = rand(0.5, 1.5); roar(e.cfg.shape === 'brute' ? 0.55 : 1.5, 0.12); }
+function alertEnemy(e) {
+  if (e.alert) return;
+  e.alert = true; e.alertT = AI_MEMORY_SECONDS; e.investigate = null;
+  e.lastSeen = { x: player.pos.x, z: player.pos.z };
+  e.special = rand(0.5, 1.5);
+  roar(e.cfg.shape === 'brute' ? 0.55 : 1.5, 0.12);
+}
 
 /** Tira o inimigo da cena: comuns voltam ao pool; o chefe (ou excesso) é descartado. */
 function disposeEnemy(e) {
@@ -285,21 +303,49 @@ function updateEnemy(e, dt) {
     const dp = Math.hypot(player.pos.x - e.pos.x, player.pos.z - e.pos.z), ds = Math.hypot(survivor.pos.x - e.pos.x, survivor.pos.z - e.pos.z);
     if (ds < dp * 0.6 && T.shape !== 'spitter') { tgt = survivor; tx = survivor.pos.x; tz = survivor.pos.z; }
   }
+  // Consegue ver de frente ou muito perto, desde que não exista parede entre os dois.
+  const vx = tx - e.pos.x, vz = tz - e.pos.z, visualDist = Math.hypot(vx, vz);
+  const facingDot = visualDist > 0.001 ? (Math.sin(e.yaw) * vx + Math.cos(e.yaw) * vz) / visualDist : 1;
+  const visualRange = T.aggro * (e.alert ? 1.25 : 1);
+  const nearSight = visualDist < visualRange && (e.alert || visualDist < 3.5 || facingDot > 0.05);
+  const blocked = nearSight && visualDist > 0.001 &&
+    castWorld(e.pos.x, e.pos.z, vx / visualDist, vz / visualDist, visualDist, 1.5) < visualDist - 0.5;
+  const sees = !player.dead && nearSight && canSeeTarget(visualDist, facingDot, visualRange, blocked, e.alert);
+  if (sees) {
+    if (!e.alert) alertEnemy(e);
+    e.lastSeen = { x: tx, z: tz }; e.alertT = AI_MEMORY_SECONDS; e.investigate = null;
+  } else if (e.hp < e.maxHp && !e.alert) {
+    // Sofrer um tiro revela a ameaça, mesmo fora do campo de visão.
+    alertEnemy(e);
+  } else if (e.alert && !T.boss && !player.dead) {
+    e.alertT -= dt;
+    if (e.alertT <= 0) {
+      e.alert = false;
+      e.investigate = { ...(e.lastSeen || e.home), t: AI_INVESTIGATE_SECONDS };
+    }
+  }
+  // Perdeu contato visual: procura a última posição conhecida, não segue através das paredes.
+  if (e.alert && !sees && e.lastSeen) { tx = e.lastSeen.x; tz = e.lastSeen.z; }
   const dx = tx - e.pos.x, dz = tz - e.pos.z, dist = Math.hypot(dx, dz) || 0.001, nx = dx / dist, nz = dz / dist;
   const hit = (dmg, knock) => (tgt === player ? hurtPlayer(dmg, e.pos.x, e.pos.z, knock) : hurtSurvivor(e));
   e.atkCd -= dt; e.flashT -= dt; e.stun -= dt; e.special -= dt; e.bite -= dt; e.stompCd -= dt;
   let mvx = 0, mvz = 0, spd = T.speed, face = Math.atan2(dx, dz);
-  const reach = T.r + player.r + 0.45;
-  // patrulha: anda devagar perto de casa até ver/ouvir o jogador
-  if (!e.alert) {
-    const pd = Math.hypot(player.pos.x - e.pos.x, player.pos.z - e.pos.z);
-    const sees = pd < T.aggro && castWorld(e.pos.x, e.pos.z, (player.pos.x - e.pos.x) / pd, (player.pos.z - e.pos.z) / pd, pd, 1.5) >= pd - 0.5;
-    if (sees || pd < 6 || e.hp < e.maxHp) alertEnemy(e);
-  }
+  const reach = T.r + (tgt === player ? player.r : 0.4) + 0.45;
   if (!e.alert && !player.dead) {
-    const hx = e.home.x - e.pos.x, hz = e.home.z - e.pos.z;
-    if (Math.random() < dt * 0.4) e.wanderA += rand(-1.5, 1.5);
-    mvx = Math.sin(e.wanderA) + hx * 0.15; mvz = Math.cos(e.wanderA) + hz * 0.15; spd *= 0.22; face = Math.atan2(mvx, mvz);
+    const search = e.investigate;
+    if (search && search.t > 0) {
+      search.t -= dt;
+      const ix = search.x - e.pos.x, iz = search.z - e.pos.z, id = Math.hypot(ix, iz);
+      if (id > 1.6) { mvx = ix / id; mvz = iz / id; spd *= 0.5; face = Math.atan2(mvx, mvz); }
+      else { spd = 0; face = Math.atan2(ix, iz); search.t -= dt * 1.5; }
+      if (search.t <= 0) e.investigate = null;
+    } else {
+      e.investigate = null;
+      const hx = e.home.x - e.pos.x, hz = e.home.z - e.pos.z;
+      if (Math.random() < dt * 0.4) e.wanderA += rand(-1.5, 1.5);
+      mvx = Math.sin(e.wanderA) + hx * 0.15; mvz = Math.cos(e.wanderA) + hz * 0.15;
+      spd *= 0.22; face = Math.atan2(mvx, mvz);
+    }
   }
   else if (player.dead) { mvx = Math.sin(e.seed + t * 0.3); mvz = Math.cos(e.seed + t * 0.3); spd *= 0.25; face = Math.atan2(mvx, mvz); }
   else if (e.stun > 0) { spd = 0; }
@@ -309,16 +355,16 @@ function updateEnemy(e, dt) {
     mvx = nx - nz * (arc + zig); mvz = nz + nx * (arc + zig);
     if (e.lunge > 0) { e.lunge -= dt; spd *= 2.3; }
     else if (dist < 6.5 && e.special <= 0) { e.lunge = 0.45; e.special = rand(2.2, 3.5); roar(1.8, 0.12); }
-    if (dist < reach && e.atkCd <= 0) { e.atkCd = 0.9; e.bite = 0.25; hit(T.dmg, 7); }
+    if (sees && dist < reach && e.atkCd <= 0) { e.atkCd = 0.9; e.bite = 0.25; hit(T.dmg, 7); }
   } else if (e.type === 'spitter') {
     const strafe = Math.sin(t * 0.6 + e.seed) > 0 ? 1 : -1, f = dist > 12 ? 1 : dist < 7 ? -1 : 0;
     mvx = nx * f - nz * strafe * 0.6; mvz = nz * f + nx * strafe * 0.6;
-    if (dist < 18 && e.special <= 0 && e.spitT <= 0) { e.special = rand(2.2, 3.4); e.spitT = 0.55; }
+    if (sees && dist < 18 && e.special <= 0 && e.spitT <= 0) { e.special = rand(2.2, 3.4); e.spitT = 0.55; }
     if (e.spitT > 0) {
       e.spitT -= dt; spd *= 0.15;
-      if (e.spitT <= 0 && castWorld(e.pos.x, e.pos.z, nx, nz, dist, 1.5) >= dist - 0.5) spit(e, nx, nz, dist);
+      if (e.spitT <= 0 && sees && castWorld(e.pos.x, e.pos.z, nx, nz, dist, 1.5) >= dist - 0.5) spit(e, nx, nz, dist);
     }
-    if (dist < reach && e.atkCd <= 0) { e.atkCd = 1.2; e.bite = 0.25; hit(T.dmg, 5); }
+    if (sees && dist < reach && e.atkCd <= 0) { e.atkCd = 1.2; e.bite = 0.25; hit(T.dmg, 5); }
   } else {
     const boss = !!T.boss, rage = boss && e.hp < e.maxHp * 0.34 ? 1.3 : 1;
     // fases do chefe: ruge e chama a matilha em 66% e 33% de vida
@@ -334,12 +380,12 @@ function updateEnemy(e, dt) {
         shockwave(e.pos.x, e.pos.z, T.stompR); shockwave(e.pos.x, e.pos.z, T.stompR * 0.55, 0xff7040); sfx.crash(); if (sfx.stomp) sfx.stomp();
         flashAt(e.pos.x, 0.6, e.pos.z, 0xff8040, 60); decal(e.pos.x, e.pos.z, 3.2, 0x14100a); G.shake = Math.max(G.shake, 0.7);
         const pd = Math.hypot(player.pos.x - e.pos.x, player.pos.z - e.pos.z);
-        if (pd < T.stompR) hurtPlayer(T.stompDmg, e.pos.x, e.pos.z, 14);
+        if (pd < T.stompR && (pd < 0.01 || castWorld(e.pos.x, e.pos.z, (player.pos.x - e.pos.x) / pd, (player.pos.z - e.pos.z) / pd, pd, 1.5) >= pd - 0.5)) hurtPlayer(T.stompDmg, e.pos.x, e.pos.z, 14);
       }
     } else if (e.charge > 0) {
       e.charge -= dt; mvx = e.cdx; mvz = e.cdz; spd = T.chargeSpeed; face = Math.atan2(e.cdx, e.cdz);
       if (Math.random() < 0.6) burst(e.pos.x, 0.2, e.pos.z, 'dust', 1, 1.5);
-      if (dist < reach + 0.3) { hit(T.chargeDmg, 16); e.charge = 0; e.stun = 0.6; }
+      if (sees && dist < reach + 0.3) { hit(T.chargeDmg, 16); e.charge = 0; e.stun = 0.6; }
     } else if (e.windup > 0) {
       e.windup -= dt; spd = 0;
       // v5: faixa no chão mostra a direção (e até onde vai) a investida
@@ -357,7 +403,7 @@ function updateEnemy(e, dt) {
       else if (dist < (boss ? 20 : 13) && dist > 4 && e.special <= 0) {
         e.windup = e.windup0 = T.windup || (boss ? 1.0 : 0.9); e.special = rand(5, 7) / rage; roar(0.5, 0.5); sfx.chargeWarn(); G.shake = Math.max(G.shake, 0.25);
       }
-      if (dist < reach + 0.2 && e.atkCd <= 0) { e.atkCd = 1.6; e.bite = 0.35; hit(T.dmg, 10); }
+      if (sees && dist < reach + 0.2 && e.atkCd <= 0) { e.atkCd = 1.6; e.bite = 0.35; hit(T.dmg, 10); }
     }
   }
   const ml = Math.hypot(mvx, mvz); if (ml > 0) { mvx /= ml; mvz /= ml; }
