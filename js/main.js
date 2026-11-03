@@ -108,7 +108,12 @@ const inputHandlers = {
       if (code === 'Digit2') { if (bag.owned[1]) switchWeapon(1); else ui.feed('Você ainda não tem a escopeta', '#a09070'); }
       if (code === 'Digit3') { if (bag.owned[2]) switchWeapon(2); else ui.feed('Você ainda não tem a submetralhadora', '#a09070'); }
       if (code === 'KeyQ') cycleWeapon(1);
-      if (code === 'KeyE') { if (ui.mapOpen()) ui.toggleMap(false); interact(); }
+      if (code === 'KeyE') { if (ui.mapOpen()) ui.toggleMap(false); else interact(); }
+      if (code === 'KeyJ' && !D.trans) {
+        const ids = story.LOG_IDS.filter((id) => story.S.logs.has(id));
+        if (ids.length) story.showCard(ids.flatMap((id) => story.logPages(id)));
+        else ui.feed('Arquivo vazio — encontre registros pelo vale', '#9fe8ff');
+      }
       if (code === 'KeyG') throwGrenade();
       if (code === 'KeyH') useMed();
       if (code === 'Tab') ui.toggleMap(!ui.mapOpen());
@@ -146,7 +151,7 @@ function update(dt) {
     updateEnemies(dt);
     updateSurvivor(dt);
     updateBrandt(dt);
-    updateCombat(dt);
+    updateCombat(dt, !!D.trans);
     updateHeli(dt);
     if (G.state === 'play') updateDirector(dt);
     else { endT -= dt; if (endT <= 0) showEnd(); }

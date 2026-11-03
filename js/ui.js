@@ -214,7 +214,7 @@ export function updateHUD(dt, d) {
   if (d.meter) { el.meterLbl.textContent = d.meter.label; el.meterFill.style.width = (100 * d.meter.k) + '%'; }
   el.score.textContent = G.score;
   if (el.ep.textContent !== String(G.ep)) el.ep.textContent = G.ep; // v10: Pontos de Extinção
-  el.combo.textContent = G.combo > 1 ? STR.combo(Math.min(G.combo, COMBO.MAX)) : '';
+  el.combo.textContent = (G.combo > 1 ? STR.combo(Math.min(G.combo, COMBO.MAX)) + ' · ' : '') + (G.cleanStreak.kills ? `SEM DANO: ${G.cleanStreak.kills} ABATES` : '');
 
   // retícula: abre com recuo e ao andar, fecha mirando
   spread = Math.max(0, spread - dt * 90);
