@@ -118,7 +118,7 @@ Cada registro possui objeto físico, posição alcançável, suporte, iluminaç�
 5. Margem↔Acampamento↔Ninho: portão do terminal, luta da Matriarca, estados de Brandt, finais alternativos.
 6. Testar todos os treze documentos nas coordenadas reais, acessibilidade E, salvamento, releitura e contagem 9→13.
 7. Matar inimigo, sair e voltar: morto continua morto, vivo preserva HP, emboscada adiada reaparece na ordem certa.
-8. Combo: 0/1/2/3/5 abates, dano no HP, colete totalmente absorvido, fad e, pausa, save, morte, troca recíproca e reentrada sem abates.
+8. Combo: 0/1/2/3/5 abates, dano no HP, colete totalmente absorvido, fade, pausa, save, morte, troca recíproca e reentrada sem abates.
 9. Qualidade Baixo/Médio/Alto; 50 transições; verificar que quantidade de geometrias/texturas não cresce continuamente.
 10. Rodar **node --test tests/coherence.test.mjs** e novos testes puros de portas, progressão, registros e combo; fazer playtest em navegador com WebGL e registrar capturas, console e resultados.
 
