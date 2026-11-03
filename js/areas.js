@@ -602,7 +602,9 @@ export function buildArea(a) {
   if (typeof a === 'string') a = AREA[a];
   if (a.ctx) return 0;
   const t0 = performance.now(), i = AREAS.indexOf(a);
-  a.ctx = W.makeCtx(mulberry32(WORLD.SEED + i * 101)); a.refs = a.build(a.ctx);
+  a.ctx = W.makeCtx(mulberry32(WORLD.SEED + i * 101));
+  try {
+  a.refs = a.build(a.ctx);
   a.refs.logs = (a.logs || []).map((l) => ({ ...l, ...W.datapad(a.ctx, l.x, l.z, l.yaw || 0) }));
   // placas com o destino em cada portão
   a.doors.forEach((d) => { const ref = a.refs.doors[d.id]; if (ref) W.doorSign(ref, '→ ' + AREA[d.to].name, DIR[d.side]); });
@@ -611,6 +613,12 @@ export function buildArea(a) {
   a.builds = (a.builds || 0) + 1;
   for (const fn of builtHooks) fn(a);
   return performance.now() - t0;
+  } catch (error) {
+    // Não deixar uma área parcialmente construída parecer pronta numa nova tentativa.
+    if (a.ctx) W.disposeGroup(a.ctx.group);
+    a.ctx = null; a.refs = null;
+    throw error;
+  }
 }
 /** Descarrega a área (descarta geometria/materiais próprios; recursos compartilhados ficam). */
 export function unloadArea(a) {

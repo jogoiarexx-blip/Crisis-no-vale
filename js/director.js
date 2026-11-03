@@ -5,6 +5,7 @@ import { WORLD, SCORE, PLAYER, EP, ENEMY_TYPES } from './config.js';
 import { captureEncounterMemory, restoreEncounterMemory } from './encounter-memory.mjs';
 import { G, writeSave, readSave, addEp } from './state.js';
 import { normalizeStreak, finishStreak } from './clean-streak.mjs';
+import { safeDoorArrival } from './door-safety.mjs';
 import { AREAS, AREA, doorArrival, buildArea, unloadArea, isBuilt, neighbors, onAreaBuilt } from './areas.js';
 import { quality } from './quality.js';
 import { idle } from './idle.js';
@@ -351,7 +352,17 @@ function setTimeoutGame(t, fn) { if (t <= 0) fn(); else timers.push({ t, fn }); 
 function cardWhenFree(pages, cb) { if (D.trans || G.state !== 'play') setTimeoutGame(0.3, () => cardWhenFree(pages, cb)); else story.showCard(pages, cb); }
 
 function startTransition(door) {
-  D.trans = { t: 0, door, switched: false };
+  const destination = AREA[door.to];
+  try {
+    if (!isBuilt(destination)) { const ms = buildArea(destination); streamStats.syncBuilds++; streamStats.lastSyncMs = Math.round(ms); }
+    const arrival = safeDoorArrival(destination, door.toDoor, player.r, WORLD.DOOR_DEPTH);
+    if (!arrival) throw new Error('Nenhum ponto livre próximo à porta de destino');
+    D.trans = { t: 0, door, arrival, switched: false };
+  } catch (error) {
+    console.error('Não foi possível preparar a passagem:', error);
+    ui.feed('Não foi possível abrir a passagem. Tente novamente.', '#ff8a70');
+    return;
+  }
   player.inv = Math.max(player.inv, WORLD.FADE * 2 + 0.6);
   sfx.door();
 }
@@ -359,7 +370,7 @@ function updateTransition(dt) {
   const T = D.trans; T.t += dt;
   const f = WORLD.FADE;
   if (!T.switched && T.t >= f) {
-    enterArea(T.door.to, T.door.toDoor); // concluir somente depois da entrada
+    enterArea(T.door.to, T.door.toDoor, T.arrival); // destino já preparado e ponto livre
     T.switched = true;
     const result = finishStreak(G.cleanStreak);
     if (result.bonus) { addEp(result.bonus); ui.feed(`Travessia limpa: ${result.kills} abates · +${result.bonus} PE`, '#9fe8ff'); }

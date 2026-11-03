@@ -146,13 +146,16 @@ function update(dt) {
   story.updateStory(dt);
   if (G.state === 'play' || G.state === 'over' || G.state === 'win') {
     if (G.state === 'play') G.elapsed += dt;
-    updatePlayer(dt);
-    if (G.state === 'play' && (mouse.down || keys.Space || pad.fire) && !D.trans) fire();
-    updateEnemies(dt);
-    updateSurvivor(dt);
-    updateBrandt(dt);
-    updateCombat(dt, !!D.trans);
-    updateHeli(dt);
+    // Durante o fade nenhum ator ou projétil continua avançando fora da tela.
+    if (!D.trans) {
+      updatePlayer(dt);
+      if (G.state === 'play' && (mouse.down || keys.Space || pad.fire)) fire();
+      updateEnemies(dt);
+      updateSurvivor(dt);
+      updateBrandt(dt);
+      updateCombat(dt);
+      updateHeli(dt);
+    }
     if (G.state === 'play') updateDirector(dt);
     else { endT -= dt; if (endT <= 0) showEnd(); }
   }
