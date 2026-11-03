@@ -6,6 +6,7 @@ import { scene, camera, resolve, castWorld, inWater, bounds, GLOW } from './worl
 import { PLAYER, CAMERA, WEAPONS, COLORS, GRENADE, INVENTORY, PICKUPS, ARMOR, UPGRADES } from './config.js';
 import { G } from './state.js';
 import { breakStreak } from './clean-streak.mjs';
+import { loadModel, limitTextures, fitWeapon } from './model-assets.js';
 import { keys } from './input.js';
 import { pad } from './gamepad.js';
 import { SETTINGS, motionK } from './settings.js';
@@ -79,7 +80,25 @@ part(B(0.07, 0.26, 0.08), gunM, 0, -0.24, 0.74, smgMesh).rotation.x = 0.12; // p
 part(B(0.08, 0.18, 0.09), gunM, 0, -0.18, 0.52, smgMesh).rotation.x = 0.3;  // empunhadura
 part(B(0.04, 0.04, 0.32), gunM, 0, 0.0, 0.3, smgMesh);                   // coronha
 const gunMeshes = [pistolMesh, shotgunMesh, smgMesh];
-function showGun(i) { gunMeshes.forEach((m, k) => { m.visible = k === i; }); }
+const modelGuns = [null, null, null], loadingGuns = [false, false, false];
+const gunAssets = [
+  {url:'assets/armas/glock.glb', parts:4, length:0.36, pos:[0,-0.06,0.68]},
+  {url:'assets/armas/escopeta.glb', length:0.92, pos:[0,-0.05,0.72]},
+  {url:'assets/armas/mp5.glb', parts:3, length:0.63, pos:[0,-0.04,0.69]},
+];
+function showGun(i) {
+  gunMeshes.forEach((m, k) => { m.visible = k === i; });
+  if (modelGuns[i] || loadingGuns[i]) return;
+  loadingGuns[i] = true;
+  const spec = gunAssets[i], container = gunMeshes[i];
+  loadModel(spec.url, spec.parts || 0).then(gltf => {
+    const model = gltf.scene; limitTextures(model);
+    model.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; } });
+    const fitted = fitWeapon(model, spec.length); fitted.position.set(...spec.pos);
+    for (const child of container.children) child.visible = false;
+    container.add(fitted); modelGuns[i] = fitted;
+  }).catch(e => console.warn('Arma GLB indisponível; usando arma simples:', e)).finally(() => { loadingGuns[i] = false; });
+}
 
 export const gunTip = new THREE.Object3D(); gunTip.position.set(0, -0.05, 0.98); gunRig.add(gunTip);
 // clarão do disparo: sprite + "estrela" de dois planos + luz forte
@@ -138,17 +157,21 @@ function heroAction(clips, names, { lower = false, swing = false, once = false }
 function loadGLB(loader, url) {
   return new Promise((res, rej) => loader.load(url, res, undefined, rej));
 }
-async function loadHeroInner() {
+let defaultHeroGLTF = null, selectedHero = 'marina', heroGeneration = 0;
+async function loadHeroInner(choice = 'marina') {
   if (/[?&]heroi=0/.test(location.search)) throw new Error('desligado por ?heroi=0');
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
   let gltf;
-  try { gltf = await loadGLB(loader, HERO.url); } catch (e) {
-    // reserva: cópia em base64 versionada no repositório (o GitHub Pages normalmente já serve o .glb binário)
-    const r = await fetch(HERO.url + '.b64'); if (!r.ok) throw e;
-    const bin = Uint8Array.from(atob((await r.text()).replace(/\s+/g, '')), (ch) => ch.charCodeAt(0));
-    gltf = await new Promise((res, rej) => loader.parse(bin.buffer, '', res, rej));
+  if (!defaultHeroGLTF) {
+    try { defaultHeroGLTF = await loadGLB(loader, HERO.url); } catch (e) {
+      const r = await fetch(HERO.url + '.b64'); if (!r.ok) throw e;
+      const bin = Uint8Array.from(atob((await r.text()).replace(/\s+/g, '')), ch => ch.charCodeAt(0));
+      defaultHeroGLTF = await new Promise((res, rej) => loader.parse(bin.buffer, '', res, rej));
+    }
   }
+  gltf = choice === 'jill' ? await loadModel('assets/personagens/jill.glb') : defaultHeroGLTF;
   const model = gltf.scene;
+  if (choice === 'jill') limitTextures(model);
   model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; if (o.material) o.material.side = THREE.FrontSide; } });
   // escala para ~1,8 m e pés no chão (y=0); o modelo já vem Y-up e virado para +Z (mesma frente do jogador)
   model.updateMatrixWorld(true);
@@ -158,8 +181,10 @@ async function loadHeroInner() {
   if (!socket) throw new Error('osso da mão direita não encontrado');
   const bone = (n) => model.getObjectByName('mixamorig:' + n) || model.getObjectByName('mixamorig' + n);
   hero.spine = bone('Spine2'); hero.hips = bone('Hips'); hero.spine0 = bone('Spine'); hero.armR = bone('RightArm'); hero.handR = bone('RightHand'); hero.socket = socket;
+  if (hero.model) { hero.mixer.stopAllAction(); hero.model.removeFromParent(); }
   hero.mixer = new THREE.AnimationMixer(model);
-  const clips = gltf.animations;
+  hero.act = {}; hero.fireAct = hero.relAct = null;
+  const clips = choice === 'jill' ? [...gltf.animations, ...defaultHeroGLTF.animations.filter(c => !gltf.animations.some(a => a.name === c.name))] : gltf.animations;
   const A = hero.act;
   A.walk = heroAction(clips, ['Walking_Woman', 'Walking'], { lower: true });
   A.run = heroAction(clips, ['Running', 'Walking'], { lower: true });
@@ -176,9 +201,9 @@ async function loadHeroInner() {
   // armas procedurais vão para o soquete da mão: o cano (+Z antigo) segue o +Y do soquete; a empunhadura fica na palma
   gunRig.removeFromParent(); socket.add(gunRig);
   gunRig.rotation.set(-Math.PI / 2, 0, 0); gunRig.scale.setScalar(GUN_SCALE / k);
-  gunRig.position.set(0, 0, 0); for (const c of gunRig.children) c.position.add(GRIP_OFS);
+  gunRig.position.set(0, 0, 0); if (!gunRig.userData.gripSet) { for (const c of gunRig.children) c.position.add(GRIP_OFS); gunRig.userData.gripSet = true; }
   pg.add(model); body.visible = false;
-  hero.model = model; hero.ok = true;
+  hero.model = model; hero.ok = true; selectedHero = choice;
   return true;
 }
 /** Promessa do carregamento do personagem: resolve true (GLB) ou false (malha antiga), nunca trava. */
@@ -186,6 +211,13 @@ export const heroReady = Promise.race([
   loadHeroInner(),
   new Promise((_, rej) => setTimeout(() => rej(new Error('tempo esgotado')), HERO.timeout)),
 ]).catch((e) => { hero.err = String(e && e.message || e); console.warn('modelo da Marina indisponível, usando malha antiga:', hero.err); return false; });
+export async function selectHero(choice) {
+  if (!['marina', 'jill'].includes(choice)) return false;
+  if (choice === selectedHero && hero.ok) return true;
+  const generation = ++heroGeneration;
+  try { if (generation !== heroGeneration) return false; return await loadHeroInner(choice); }
+  catch (e) { console.warn('Personagem indisponível:', e); return false; }
+}
 export const heroInfo = () => ({ ok: hero.ok, err: hero.err, weights: { walk: hero.walkW, run: hero.runW, loco: hero.loco, blend: hero.blend, legYaw: hero.legYaw, phase: hero.ph, aim: hero.aimW, fire: hero.fireW, reload: hero.relW } });
 function heroFire() {
   if (!hero.ok) return;

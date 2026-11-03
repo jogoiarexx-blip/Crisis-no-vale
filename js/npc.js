@@ -9,6 +9,7 @@ import { burst } from './fx.js';
 import * as ui from './ui.js';
 import { lerpAngle } from './utils.js';
 import { ESCORT } from './config.js';
+import { loadModel, limitTextures } from './model-assets.js';
 
 export const survivor = {
   pos: new THREE.Vector3(), yaw: 0, following: false, downT: 0, safeT: 0, grit: 2, gritT: 0, downs: 0, visible: false, phase: 0, home: { x: 0, z: 0 }, goal: null, name: 'Dra. Lima',
@@ -44,8 +45,28 @@ P(new THREE.CylinderGeometry(0.1, 0.1, 0.06, 10), skin, 0, 1.64, 0, body); // pe
 const marker = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: 0x60ff90, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
 marker.scale.setScalar(0.7); marker.position.y = 2.45; g.add(marker);
 
+// Carrega Lima somente quando ela é necessária; preserva a malha de reserva em caso de erro.
+let limaModel = null, limaMixer = null, limaWalk = null, limaLoading = false;
+function ensureLimaModel() {
+  if (limaModel || limaLoading) return;
+  limaLoading = true;
+  loadModel('assets/personagens/dra-lima.glb').then(gltf => {
+    const model = gltf.scene;
+    limitTextures(model); model.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(model), height = box.max.y - box.min.y;
+    if (!Number.isFinite(height) || height < 0.01) throw new Error('modelo sem altura válida');
+    const scale = 1.8 / height; model.scale.setScalar(scale); model.position.y = -box.min.y * scale;
+    model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+    for (const child of body.children) child.visible = false;
+    body.add(model); limaModel = model;
+    const clip = gltf.animations.find(a => a.name === 'Walking') || gltf.animations[0];
+    if (clip) { limaMixer = new THREE.AnimationMixer(model); limaWalk = limaMixer.clipAction(clip); limaWalk.play(); limaWalk.paused = true; }
+  }).catch(e => console.warn('Modelo da Dra. Lima indisponível; usando reserva:', e))
+    .finally(() => { limaLoading = false; });
+}
 /** Coloca a sobrevivente esperando num ponto (cabine). */
 export function resetSurvivor(x, z, show) {
+  if (show) ensureLimaModel();
   survivor.home = { x, z }; survivor.pos.set(x, 0, z); survivor.following = false; survivor.downT = 0; survivor.safeT = 0; survivor.grit = ESCORT.GRIT; survivor.gritT = 0; survivor.downs = 0; survivor.goal = null;
   survivor.visible = show; g.visible = show; body.rotation.set(0, 0, 0); body.position.y = 0; survivor.yaw = 0.8;
   survivor.nav = { route: [], index: 0, aim: null, repath: 0, stuck: 0, warn: 0 };
@@ -162,6 +183,7 @@ export function updateSurvivor(dt) {
   if(nav.stuck>1.2)nav.repath=0;
   // Movimento dos membros segue os metros reais percorridos e para quando bloqueada.
   const gait=Math.min(1,traveled/Math.max(0.001,dt*3.2));
+  if (limaMixer && limaWalk) { limaWalk.paused = gait < 0.08; limaWalk.timeScale = Math.max(0.6, gait * 1.2); limaMixer.update(dt); }
   if(traveled>0.001)survivor.phase+=traveled*2.8;
   const sw=Math.sin(survivor.phase)*0.63*gait;
   legs[0].rotation.x=sw;legs[1].rotation.x=-sw;
