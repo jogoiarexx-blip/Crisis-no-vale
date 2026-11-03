@@ -61,3 +61,14 @@ Foi criada a especificação **[PLANO-MUNDO-COERENTE.md](PLANO-MUNDO-COERENTE.md
 - **Depois:** A* sobre AABB/círculos; waypoints suavizados somente em linha livre; replanejamento limitado; animação vinculada aos metros realmente percorridos. O estado da NPC fica no save e no retorno ao pátio, sem repetições de ondas.
 - **Consistência:** bloqueio temporário das portas enquanto Lima digita o código, e início do código apenas quando ela está de pé.
 - **Validação:** teste automatizado de desvio de obstáculos já incluído. Testes completos no navegador para percurso real até o terminal continuam pendentes.
+
+## Revisão parcial — portas, sequência limpa e arquivo (03/11/2026)
+
+Base: commit 4a2cd4e. Esta revisão está em branch de trabalho, não certificada para Pages.
+
+- **Antes:** chegar à borda de uma porta iniciava a transição automaticamente. **Depois:** borda bloqueia a passagem; E solicita a troca, verifica travas e ligação recíproca. O streaming de áreas vizinhas já existia. A animação dos portões continua ligada ao destravamento, não à ação de abrir e fechar; colisões e destinos ainda precisam de teste real.
+- **Antes:** somente combo de cadência. **Depois:** contador separado de abates sem golpe, cancelado no início de um golpe processado, inclusive com colete; bônus 2=10, 3–4=25, 5–7=50, 8+=80 PE após entrada na área. Contador persistido no save v5; saves antigos começam vazios. Combo rápido permanece e seu temporizador pausa durante fade. Testes puros cobrem tabela, reset e serialização, não os ganchos reais de combate, morte e travessia.
+- **Antes:** reler apenas voltando ao objeto. **Depois:** tecla J abre os documentos encontrados em sequência, usando seus textos e IDs originais; não é ainda uma aba com seleção individual. Acessibilidade dos 13 documentos não foi verificada.
+- **Testes executados:** `node --check` nos módulos alterados e `node --test tests/*.test.mjs` (13 testes aprovados). Cobrem regras puras do combo, memória de inimigos e navegação de escolta; não são uma certificação do jogo integrado.
+- **Navegador/Pages:** página publicada acessível, mas o navegador deste ambiente não conseguiu criar contexto WebGL (GL_RENDERER Disabled). Nenhuma travessia, animação, colisão, controle ou campanha completa pôde ser jogada. A revisão não foi publicada no Pages.
+- **Pendente P0:** testar todos os sentidos e distâncias de interação; validação do spawn e colisores; recuperação em falha de carregamento; animação/sons/estado real de abertura e fechamento; reposicionamento e suportes dos documentos; arquivo com seleção individual; emboscadas narrativas únicas com pistas; persistência e testes integrados de todos os estados e saves; prevenção de duplicação em cenários reais. Verificar controle por gamepad. P1 visual, FPS e percurso completo continuam pendentes.

@@ -4,6 +4,7 @@ import { activateArea, bounds, boxes, setDoorLight, setPower, atmo, spots, bossG
 import { WORLD, SCORE, PLAYER, EP, ENEMY_TYPES } from './config.js';
 import { captureEncounterMemory, restoreEncounterMemory } from './encounter-memory.mjs';
 import { G, writeSave, readSave, addEp } from './state.js';
+import { normalizeStreak, finishStreak } from './clean-streak.mjs';
 import { AREAS, AREA, doorArrival, buildArea, unloadArea, isBuilt, neighbors, onAreaBuilt } from './areas.js';
 import { quality } from './quality.js';
 import { idle } from './idle.js';
@@ -358,7 +359,11 @@ function updateTransition(dt) {
   const T = D.trans; T.t += dt;
   const f = WORLD.FADE;
   if (!T.switched && T.t >= f) {
-    T.switched = true; enterArea(T.door.to, T.door.toDoor); streamAround(D.area); // sob a tela preta
+    enterArea(T.door.to, T.door.toDoor); // concluir somente depois da entrada
+    T.switched = true;
+    const result = finishStreak(G.cleanStreak);
+    if (result.bonus) { addEp(result.bonus); ui.feed(`Travessia limpa: ${result.kills} abates · +${result.bonus} PE`, '#9fe8ff'); }
+    streamAround(D.area);
     T.t = f; T.hold = 0.06; // segura a tela preta um instante: o 1º quadro da nova área (shaders/upload) fica escondido
   }
   if (T.hold > 0) { T.hold -= dt; T.t = f; ui.setFade(1); return; }
@@ -407,24 +412,17 @@ function pushBack(d) {
 }
 function checkDoors(dt) {
   D.lockMsgT -= dt;
-  for (const d of D.area.doors) {
-    if (!nearDoor(d, 0)) continue;
-    if (isLocked(D.area.id, d.id)) {
-      pushBack(d); sfx.locked();
-      if (D.lockMsgT <= 0) { ui.feed(LOCK_MSG[d.lock], '#ff8a70'); D.lockMsgT = 2; }
-      return;
-    }
-    if (D.event && (D.event.kind === 'gen' || D.event.kind === 'code')) {
-      pushBack(d);
-      if (D.lockMsgT <= 0) {
-        ui.feed(D.event.kind === 'code' ? 'Espere a Dra. Lima terminar o código!' : 'Termine de ligar o gerador!', '#ffb070');
-        D.lockMsgT = 2;
-      }
-      return;
-    }
-    startTransition(d); return;
-  }
+  // A proximidade nunca inicia uma transição. A borda é bloqueada até E.
+  for (const d of D.area.doors) if (nearDoor(d, 0)) { pushBack(d); return; }
 }
+function doorBlocked(d) {
+  if (isLocked(D.area.id, d.id)) return LOCK_MSG[d.lock] || 'Porta bloqueada';
+  if (D.event && D.event.kind === 'gen') return 'Termine de ligar o gerador!';
+  if (D.event && D.event.kind === 'code') return 'Espere a Dra. Lima terminar o código!';
+  return null;
+}
+function nearbyDoor() { return D.area.doors.find((d) => nearDoor(d, 3)); }
+
 
 // ---------- eventos por área ----------
 function startGenerator(term) {
@@ -597,7 +595,14 @@ function promptFor(it) {
 }
 export function interact() {
   if (G.state !== 'play' || D.trans || player.dead) return;
-  const it = nearestInteract(); if (!it) return;
+  const it = nearestInteract();
+  if (!it) {
+    const d = nearbyDoor(); if (!d) return;
+    const blocked = doorBlocked(d);
+    if (blocked) { if (D.lockMsgT <= 0) { ui.feed(blocked, '#ff8a70'); sfx.locked(); D.lockMsgT = 2; } return; }
+    if (!AREA[d.to] || !AREA[d.to].doors.some((other) => other.id === d.toDoor && other.to === D.area.id)) { ui.feed('Passagem indisponível', '#ff8a70'); return; }
+    startTransition(d); return;
+  }
   if (it.kind === 'revive') { reviveSurvivor(true); story.clearSpeech(); story.sayOne('LIMA', REVIVE_LINES[survivor.downs % REVIVE_LINES.length]); return; }
   if (it.kind === 'save') {
     // v10: o terminal abre o menu SALVAR · LOJA · SAIR — mas não com perigo por perto
@@ -659,7 +664,7 @@ function saveGame(term) {
     // v6: v2 = 3 armas + colete (saves v1 são migrados em restoreBag)
     // v7: v3 — corrige o save v2, que perdia flags/estado das áreas/encontros (estavam dentro de um comentário)
     // v10: v4 — Pontos de Extinção (ep/epTotal) e upgrades da loja (bag.up)
-    v: 4, area: a.id, at, ep: G.ep, epTotal: G.epTotal,
+    v: 5, cleanStreak: { ...G.cleanStreak }, area: a.id, at, ep: G.ep, epTotal: G.epTotal,
     flags: { ...F, escort: !!F.escort, bossFight: false, nestFight: false },
     survivor: a.id === 'patio' ? snapshotSurvivor() : D.survivorMemory,
     st: D.st, enc: [...D.enc],
@@ -676,7 +681,7 @@ export function hasSave() { return !!readSave(); }
 export function startCampaign(fromSave) {
   const s = fromSave ? readSave() : null;
   clearEnemies(); clearPickups(); clearFx(); resetCombat(); ui.clearFloaters(); ui.clearMessages(); timers.length = 0;
-  resetPlayer(); resetCampaign(); D.area = null;
+  resetPlayer(); resetCampaign(); D.area = null; G.cleanStreak = normalizeStreak(s && s.cleanStreak);
   Object.assign(G, { score: 0, kills: 0, shots: 0, hits: 0, elapsed: 0, shake: 0, saves: 0, ep: 0, epTotal: 0, dmgTaken: 0 });
   AREAS.forEach((a) => { if (a.refs && a.refs.powerLamps) a.refs.powerLamps.forEach((L) => { L.on = false; }); });
   story.resetStory(s && s.story);
@@ -844,7 +849,7 @@ export function hudData() {
   const a = D.area, [obj, target] = objective();
   const it = D.trans ? null : nearestInteract();
   let prompt = promptFor(it);
-  if (!prompt && !D.trans) for (const d of a.doors) if (isLocked(a.id, d.id) && nearDoor(d, 3)) { prompt = { text: '🔒 ' + LOCK_MSG[d.lock], locked: true }; break; }
+  if (!prompt && !D.trans) { const d = nearbyDoor(); if (d) { const reason = doorBlocked(d); prompt = reason ? { text: '🔒 ' + reason, locked: true } : { text: 'Atravessar para ' + AREA[d.to].name }; } }
   const markers = {}; AREAS.forEach((x) => { if (x.save) markers[x.id] = 'save'; });
   markers[target] = '★ ' + (markers[target] ? 'objetivo • save' : 'objetivo');
   const points = a.refs.terminals.map((t) => ({ x: t.x, z: t.z, col: t.kind === 'save' ? '#40ff90' : t.kind === 'generator' ? '#ffb040' : t.kind === 'hack' ? '#ff6040' : '#40c0ff' }));

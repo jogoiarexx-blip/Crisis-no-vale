@@ -5,6 +5,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { scene, camera, resolve, castWorld, inWater, bounds, GLOW } from './world.js';
 import { PLAYER, CAMERA, WEAPONS, COLORS, GRENADE, INVENTORY, PICKUPS, ARMOR, UPGRADES } from './config.js';
 import { G } from './state.js';
+import { breakStreak } from './clean-streak.mjs';
 import { keys } from './input.js';
 import { pad } from './gamepad.js';
 import { SETTINGS, motionK } from './settings.js';
@@ -388,6 +389,7 @@ let armKick = 0, armSwap = 0;
 // ---------- vida ----------
 export function hurtPlayer(d, fromX, fromZ, knock) {
   if (player.inv > 0 || G.state !== 'play' || player.dead) return;
+  if (G.cleanStreak.kills) { breakStreak(G.cleanStreak); ui.feed('Sequência sem dano interrompida', '#ff8a70'); }
   let soaked = 0;
   if (bag.armor > 0) { // v6: colete absorve parte do golpe
     soaked = Math.min(bag.armor, Math.round(d * ARMOR.ABSORB)); bag.armor -= soaked; d -= soaked;

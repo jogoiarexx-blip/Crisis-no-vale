@@ -5,6 +5,7 @@ import { PICKUPS, COMBO, PLAYER, GRENADE, INVENTORY, ARMOR, NOISE, EP, AIM } fro
 import { pad } from './gamepad.js';
 import { SETTINGS } from './settings.js';
 import { G, addEp } from './state.js';
+import { recordKill } from './clean-streak.mjs';
 import { player, weapons, arms, bag, curWeapon, startReload, muzzleFlash, gunTip, heal, switchWeapon, hurtPlayer, medMax, grenadeMax, resMax } from './player.js';
 import { enemies, enemyEvents, makeNoise } from './enemies.js';
 import { sfx, roar } from './audio.js';
@@ -156,7 +157,7 @@ export function damageEnemy(e, d, dx, dz, knock) {
   else if (e.windup > 0 && d >= (e.cfg.boss ? 70 : 40)) { e.windup = 0; e.stun = 0.8; } // tiro forte interrompe a investida
   if (e.hp > 0) return false;
   e.dead = true; e.deadT = 0; e.fallDir = Math.random() < 0.5 ? 1 : -1;
-  G.kills++;
+  G.kills++; recordKill(G.cleanStreak);
   G.combo = G.comboT > 0 ? G.combo + 1 : 1; G.comboT = COMBO.WINDOW;
   const mult = Math.min(G.combo, COMBO.MAX), pts = e.cfg.score * mult;
   G.score += pts;
@@ -344,9 +345,9 @@ function updatePickups(dt) {
 }
 
 /** Por frame: auto-recarga, combo, retícula sobre inimigo, granadas e itens. */
-export function updateCombat(dt) {
+export function updateCombat(dt, freezeCombo = false) {
   if (autoReloadT > 0) { autoReloadT -= dt; if (autoReloadT <= 0 && G.state === 'play') startReload(); }
-  if (G.comboT > 0) { G.comboT -= dt; if (G.comboT <= 0) G.combo = 0; }
+  if (!freezeCombo && G.comboT > 0) { G.comboT -= dt; if (G.comboT <= 0) G.combo = 0; }
   // v11: dispersão volta sozinha; retícula fica vermelha também quando a assistência pegaria o alvo
   bloom *= Math.exp(-(curWeapon().bloomRec || 5) * dt);
   if (G.state === 'play') {

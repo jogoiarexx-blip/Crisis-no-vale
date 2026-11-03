@@ -19,6 +19,7 @@ export const G = {
   pitch: -0.12,
   aiming: false,
   shoulder: 1,        // 1 = ombro direito, -1 = esquerdo
+  cleanStreak: { kills: 0 },
   combo: 0,
   comboT: 0,
   best: 0,
