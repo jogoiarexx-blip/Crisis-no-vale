@@ -11,4 +11,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test tests/coherence.test.mjs
+      - run: node --check js/director.js && node --check js/npc.js && node --check js/enemies.js
+      - run: node --test tests/coherence.test.mjs tests/escort.test.mjs
