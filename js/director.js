@@ -99,7 +99,7 @@ function objective() {
   if (!D.visited.has('heliponto')) return ['Siga pelo portão leste do pátio até o heliponto', 'heliponto'];
   if (!F.bossDead) return ['Derrote o Colosso', 'heliponto'];
   if (F.act2) return objectiveAct2();
-  if (!D.event || D.event.kind !== 'rescue') return ['Chame o resgate na marca H — ou siga o rio pelo portão leste (Ato 2)', 'heliponto'];
+  if (!D.event || D.event.kind !== 'rescue') return ['Aperte E na marca H para resgate — ou siga pelo portão leste (Ato 2)', 'heliponto'];
   return ['Aguente até o helicóptero chegar!', 'heliponto'];
 }
 /** v7: cadeia de objetivos do Ato 2 (rio abaixo atrás do Brandt). */
@@ -113,8 +113,8 @@ function objectiveAct2() {
   if (ev === 'charges') return ['Proteja as cargas enquanto elas armam!', 'ninho'];
   if (D.fuse > 0) return ['Afaste-se do ninho! Detonação em ' + Math.ceil(D.fuse) + ' s', 'ninho'];
   if (!F.brandt) return ['Prenda o Brandt no cais antes que o barco ligue', 'ninho'];
-  if (!F.nestDestroyed) return ['Chame o Garça-1 na marca H — ou plante cargas no ninho (opcional)', 'ninho'];
-  return ['Chame o Garça-1 na marca H da clareira', 'ninho'];
+  if (!F.nestDestroyed) return ['Prenda Brandt, plante cargas (opcional) ou aperte E na marca H para sair', 'ninho'];
+  return ['Aperte E na marca H da clareira para chamar o Garça-1', 'ninho'];
 }
 
 // ---------- troca de área ----------
@@ -168,7 +168,7 @@ export function enterArea(id, doorId, at) {
   if (D.lockdown) endLockdown(true);
   // falas de chegada (uma vez por campanha)
   const lines = story.LINES['enter_' + id];
-  if (lines && !(id === 'lab' && F.power) && !(id === 'patio' && F.heliCode)) setTimeoutGame(first ? 2.2 : 0.8, () => story.say(lines, 'enter_' + id, true));
+  if (lines && !(id === 'lab' && F.power) && !(id === 'patio' && F.heliCode)) setTimeoutGame(first ? 2.2 : 0.8, () => { if (D.area === a) story.say(lines, 'enter_' + id, true); });
   if (id === 'heliponto' && !F.bossDead && !story.S.said.has('card_boss')) { story.S.said.add('card_boss'); setTimeoutGame(0.9, () => cardWhenFree(story.BEATS.boss)); }
   // v7: primeira vez na margem = começa o Ato 2 (o resgate do penhasco deixa de valer)
   if (id === 'margem' && !F.act2) { F.act2 = true; ui.banner('ATO 2 — RIO ABAIXO', a.sub, 3.4); setTimeoutGame(0.6, () => cardWhenFree(story.ACT2_INTRO)); }
@@ -482,6 +482,24 @@ function updateEvent(dt) {
   }
 }
 
+/** Inicia a extração apenas por interação explícita com o sinalizador da marca H. */
+function startRescue() {
+  const a = D.area;
+  if (!a || D.trans || D.event || F.rescued) return false;
+  const nest = a.id === 'ninho';
+  if (nest ? (!F.nestClear || D.fuse > 0) : (a.id !== 'heliponto' || !F.bossDead || F.act2)) return false;
+  const h = a.helipad;
+  if (!h || Math.hypot(player.pos.x - h.x, player.pos.z - h.z) > h.r) return false;
+  D.event = { kind: 'rescue', t: 0, dur: 14, bursts: [1, 5, 9], bi: 0, x: h.x, z: h.z, range: h.r + 3, warnT: 0 };
+  if (nest) Object.assign(D.event, { waves: RESCUE2_WAVES, warn: 'Volte para a marca H da clareira!', lines: ['rescue2_mid', 'rescue_near'] });
+  sfx.alarm(); ui.announce('Sinalizador acionado! Aguente até o helicóptero chegar', '#ffe070');
+  flashAt(h.x, 1, h.z, 0xff3020, 160);
+  story.say(story.LINES[nest ? 'rescue2_start' : 'rescue_start'], nest ? 'rescue2_start' : 'rescue_start', true);
+  if (a.refs.heli) D.heli = { t: 0, landing: false, chopT: 0 };
+  D.mapDirty = true;
+  return true;
+}
+
 // ---------- interação (tecla E) ----------
 function interactables() {
   const out = [], a = D.area;
@@ -490,6 +508,10 @@ function interactables() {
   if (a.id === 'patio' && survivor.visible && !survivor.following && !F.heliCode) out.push({ kind: 'survivor', x: survivor.pos.x, z: survivor.pos.z });
   if (a.id === 'patio' && survivor.visible && F.heliCode && !D.event) out.push({ kind: 'talk', x: survivor.pos.x, z: survivor.pos.z });
   for (const l of a.refs.logs || []) out.push({ kind: 'log', x: l.x, z: l.z, l });
+  // A extração é uma decisão: primeiro interaja com a marca H (o rio continua opcional).
+  if (!D.event && !F.rescued && a.helipad && ((a.id === 'heliponto' && F.bossDead && !F.act2) || (a.id === 'ninho' && F.nestClear && D.fuse <= 0))) {
+    out.push({ kind: 'rescue', x: a.helipad.x, z: a.helipad.z, near: a.helipad.r });
+  }
   // v6: segredo — depois de ler o rádio da Tellus-2 (log9), dá para transmitir as provas no canal aberto
   if (a.id === 'heliponto' && story.S.logs.has('log9') && !F.broadcast) {
     const l = (a.refs.logs || []).find((x) => x.id === 'log9');
@@ -532,6 +554,7 @@ function promptFor(it) {
       if (F.campGate) return { text: 'Portão sul liberado', locked: true };
       if (D.event) return { text: 'Quebrando a senha...', locked: true };
       return { text: 'Quebrar a senha do portão sul (o alarme atrai a matilha)' };
+    case 'rescue': return { text: D.area.id === 'ninho' ? 'Acionar sinalizador — concluir o Ato 2' : 'Acionar sinalizador — encerrar o Ato 1', urgent: true };
     case 'arrest': return { text: '⛓ Prender Otávio Brandt', urgent: true };
     case 'charges': return { text: '💣 Plantar cargas no ninho (opcional)' };
   }
@@ -557,6 +580,7 @@ export function interact() {
     story.clearSpeech(); story.sayOne('LIMA', story.POST_CODE[D.talkI++ % story.POST_CODE.length]);
   } else if (it.kind === 'log') readLog(it.l.id);
   else if (it.kind === 'broadcast' && F.bossDead) broadcast();
+  else if (it.kind === 'rescue') startRescue();
   else if (it.kind === 'hack' && !F.campGate && !D.event) startHack(it);
   else if (it.kind === 'arrest' && !F.brandt) arrestBrandt();
   else if (it.kind === 'charges' && !F.nestDestroyed && !D.event) startCharges(it);
@@ -656,7 +680,7 @@ enemyEvents.onKilled = (e) => {
   } else if (e.cfg.boss) {
     F.bossFight = false; F.bossDead = true; D.boss = null; syncGates(D.area, false);
     // a matilha foge quando o alfa cai
-    sfx.bossRoar(); ui.banner('COLOSSO ABATIDO', 'Corra para a marca H e chame o resgate!', 3.4);
+    sfx.bossRoar(); ui.banner('COLOSSO ABATIDO', 'Aperte E na marca H para resgate, ou siga pelo portão leste!', 4.2);
     objectiveDone(); G.score += SCORE.OBJECTIVE;
     bossGlow(null); flashAt(e.pos.x, 2, e.pos.z, 0xff6020, 260); G.shake = Math.max(G.shake, 0.9);
     setTimeoutGame(1.4, () => story.say(story.LINES.boss_dead, 'boss_dead', true));
@@ -728,20 +752,8 @@ export function updateDirector(dt) {
       story.clearSpeech(); story.say(story.LINES.code_start);
     }
   }
-  // resgate: subir no heliponto depois do chefe
-  // v7: no Ato 2 o resgate é na clareira do ninho (depois da Matriarca)
-  const nest = a.id === 'ninho';
-  if (((a.id === 'heliponto' && F.bossDead && !F.act2) || (nest && F.nestClear && !(D.fuse > 0))) && !D.event && !F.rescued) {
-    const h = a.helipad;
-    if (Math.hypot(player.pos.x - h.x, player.pos.z - h.z) < h.r) {
-      D.event = { kind: 'rescue', t: 0, dur: 14, bursts: [1, 5, 9], bi: 0, x: h.x, z: h.z, range: h.r + 3, warnT: 0 };
-      if (nest) Object.assign(D.event, { waves: RESCUE2_WAVES, warn: 'Volte para a marca H da clareira!', lines: ['rescue2_mid', 'rescue_near'] });
-      sfx.alarm(); ui.announce('Sinalizador aceso! Aguente até o helicóptero chegar', '#ffe070');
-      flashAt(h.x, 1, h.z, 0xff3020, 160);
-      story.say(story.LINES[nest ? 'rescue2_start' : 'rescue_start'], nest ? 'rescue2_start' : 'rescue_start', true);
-      if (a.refs.heli) D.heli = { t: 0, landing: false, chopT: 0 };
-    }
-  }
+  // O jogador decide quando chamar o Garça-1 pela tecla E na marca H.
+  // Entrar na pista não encerra mais a missão por acidente.
   // v7: Brandt ligando o barco (contagem) / pavio das cargas / barco indo embora
   if (nest && F.nestClear && !F.brandt && D.brandtT > 0) {
     D.brandtT -= dt;
@@ -811,13 +823,14 @@ export function hudData() {
   if (survivor.visible && survivor.downT > 0) sub = `⚠ ${survivor.name} caída — chegue perto e aperte E`;
   else if (a.id !== target && !D.trans) { const w = pathHint(a.id, target); if (w) sub = sub || w; }
   if (a.id === 'ninho' && F.nestClear && !F.brandt && D.brandtT > 0) sub = `⛓ Brandt no cais (leste) — o barco liga em ${Math.ceil(D.brandtT)} s`;
-  if (F.bossDead && !F.act2 && !F.rescued && a.id === 'heliponto' && !D.event) sub = sub || 'Opcional — Ato 2: portão leste → margem do rio';
+  if (F.bossDead && !F.act2 && !F.rescued && a.id === 'heliponto' && !D.event) sub = sub || 'Escolha: E na marca H encerra o Ato 1; portão leste inicia o Ato 2';
   const E = D.event;
   const dirty = D.mapDirty; D.mapDirty = false;
   return {
     area: a, objective: obj, prompt, boss: D.boss && !D.boss.dead ? D.boss : null,
     meter: E ? { label: METER_LBL[E.kind] + ' ' + Math.floor(100 * Math.min(1, E.t / E.dur)) + '%', k: Math.min(1, E.t / E.dur) } : null,
-    visited: D.visited, isLocked, markers, points, mapDirty: dirty, sub, logs: story.S.logs.size, logsTotal: story.TOTAL_LOGS,
+    visited: D.visited, isLocked, markers, points, mapDirty: dirty, sub,
+    logs: story.S.logs.size, logsTotal: F.act2 ? story.TOTAL_LOGS : story.ACT1_LOGS.length,
   };
 }
 export const currentObjective = () => objective()[0];
@@ -853,9 +866,11 @@ export function rank() {
 }
 export function endStats() {
   return {
-    elapsed: G.elapsed, area: D.area ? D.area.name : '', score: G.score, visited: D.visited.size, total: AREAS.length,
+    elapsed: G.elapsed, area: D.area ? D.area.name : '', score: G.score, visited: D.visited.size,
+    total: F.act2Win ? AREAS.length : AREAS.filter((a) => !['margem', 'acampamento', 'ninho'].includes(a.id)).length,
     objectives: D.objectives, kills: G.kills, saves: G.saves, acc: G.shots ? Math.round(G.hits / G.shots * 100) : 0, rank: rank(),
-    logs: story.S.logs.size, logsTotal: story.TOTAL_LOGS, ending: story.ending(F), epTotal: G.epTotal,
+    logs: F.act2Win ? story.S.logs.size : story.ACT1_LOGS.filter((id) => story.S.logs.has(id)).length,
+    logsTotal: F.act2Win ? story.TOTAL_LOGS : story.ACT1_LOGS.length, ending: story.ending(F), epTotal: G.epTotal,
   };
 }
 /** Helicóptero de resgate: chega durante o evento e pousa na vitória (roda também no estado 'win'). */

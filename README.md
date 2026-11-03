@@ -21,12 +21,11 @@ Você é a agente **Marina Rocha**, enviada depois de três dias de silêncio do
 
 ## Jogar online
 
-**https://luispauloalves500.github.io/crise-no-vale/**
+**https://jogoiarexx-blip.github.io/Crisis-no-vale/**
 
-O jogo roda direto no navegador (desktop, com teclado e mouse ou controle), sem instalar nada. Os ajustes ficam salvos no navegador (`crise-no-vale-settings`), assim como o progresso (`crise-no-vale-save`). O GitHub Pages republica o site a cada push na branch `main`.
+O jogo roda direto no navegador (desktop, com teclado e mouse ou controle), sem instalar nada. No final do Ato 1, pressione **E** na marca H para iniciar a extração; o portão leste leva ao Ato 2. Entrar na marca H por acidente não inicia o resgate. Os ajustes ficam salvos no navegador (`crise-no-vale-settings`), assim como o progresso (`crise-no-vale-save`). O GitHub Pages republica o site a cada push na branch `main`.
 
-- O repositório traz o workflow `.github/workflows/pages.yml` ("Publicar no GitHub Pages"), que publica só `index.html`, `css/` e `js/`.
-- Para o workflow assumir a publicação, ajuste uma vez **Settings → Pages → Source: GitHub Actions** (https://github.com/luispauloalves500/crise-no-vale/settings/pages). Enquanto a fonte for "Deploy from a branch" (`main`, raiz), o site continua sendo atualizado do mesmo jeito.
+- O repositório atual publica o jogo em `https://jogoiarexx-blip.github.io/Crisis-no-vale/`. Confira a configuração em [Settings → Pages](https://github.com/jogoiarexx-blip/Crisis-no-vale/settings/pages). Esta revisão não adiciona um workflow de GitHub Actions.
 - Os caminhos são relativos (`<base href="./">`) e o Three.js vem do CDN, então o jogo funciona em `/crise-no-vale/`.
 
 ## Como jogar
@@ -111,7 +110,7 @@ Todo o som é gerado no navegador com WebAudio; não há nenhum arquivo de áudi
    - Ele chama raptores nas fases de vida.
    - Quando bate numa parede fica atordoado e leva +50% de dano. Granadas também o atordoam.
    - v5: um **anel vermelho** no chão avisa o pisão e uma **faixa** mostra a direção da investida.
-5. **Resgate.** Com o Colosso morto, suba na marca H e aguente 14 s até o helicóptero chegar. No fim você recebe um rank (S–D) calculado pelo tempo, pela precisão e pelo número de saves.
+5. **Resgate.** Com o Colosso morto, aproxime-se da marca H e aperte **E** para acionar o sinalizador; então aguente 14 s até o helicóptero chegar. Se quiser continuar a campanha, use o portão leste para o Ato 2 antes de chamar o resgate. No fim você recebe um rank (S–D) calculado pelo tempo, pela precisão e pelo número de saves.
 
 ### Ato 2 — Rio Abaixo (v7, sem spoilers pesados)
 
