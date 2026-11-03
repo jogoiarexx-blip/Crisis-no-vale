@@ -46,3 +46,10 @@ Preservar o jogo e seus eventos existentes; alinhar escolha do jogador, roteiro,
 **Teste automatizado:** `node --test tests/coherence.test.mjs` valida funções puras de percepção e memória dos encontros. **Pendente:** teste humano/navegador do fluxo completo, paredes, raio de som, fuga e retorno a cada uma das nove áreas, save/load durante e após alertas.
 
 **Ajuste de QA:** apenas dano novo desperta a patrulha sem visão. HP reduzido carregado de save não reativa perseguição sem contato. Coberto por teste puro adicional.
+
+
+## Plano ampliado de mundo persistente — especificado, não implementado (03/11/2026)
+
+Foi criada a especificação **[PLANO-MUNDO-COERENTE.md](PLANO-MUNDO-COERENTE.md)**, baseada na inspeção de nove áreas, portas/condições, treze documentos, encontros e combo atual de 2,5 segundos. Prioridades: P0 transições com debounce/posicionamento e animação; P0 documentos coerentes e persistentes; P0 backtracking com novos encontros por evento sem reviver mortos; P0 combo de abates sem golpe por trecho com bônus único ao cruzar para a próxima área; P1 ambientação e mapa. O **[PROMPT-IMPLEMENTACAO-MUNDO.md](PROMPT-IMPLEMENTACAO-MUNDO.md)** contém a instrução integral para um agente implementar e testar o plano.
+
+**Status:** somente documentação atualizada nesta revisão. Não declarar as funcionalidades novas implementadas nem as travessias certificadas sem código e testes reproduzidos.
