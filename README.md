@@ -104,7 +104,7 @@ Todo o som é gerado no navegador com WebAudio; não há nenhum arquivo de áudi
 
 1. **Cais → Ruínas → Laboratório.** Pegue a escopeta no caminho.
 2. **Ligar a energia.** O portão norte do laboratório está sem energia. No pântano, ligue o gerador (E). O barulho atrai a matilha: fique perto dele por 20 s enquanto chegam três grupos de inimigos. A energia volta, as lâmpadas acendem e o portão abre. Depois disso as ruínas e o laboratório ganham novos encontros.
-3. **Escolta.** No pátio, fale com a Dra. Lima (E). Ela passa a seguir você. Leve-a até o terminal de controle no nordeste, protegendo-a de raptores e de um bruto que arromba o galpão. Ela aguenta uma mordida. Na segunda ela cai: chegue perto e aperte **E** para levantá-la. Ela digita o código e libera o portão leste. Se você sair do pátio antes disso, a escolta reinicia.
+3. **Escolta.** No pátio, fale com a Dra. Lima (E). Ela passa a seguir você. Leve-a até o terminal de controle no nordeste, protegendo-a de raptores e de um bruto que arromba o galpão. Ela aguenta uma mordida. Na segunda ela cai: chegue perto e aperte **E** para levantá-la. Ela digita o código e libera o portão leste. Se você sair do pátio antes disso, a Dra. Lima espera no ponto onde ficou; ao voltar, a escolta continua sem repetir as emboscadas.
 4. **Chefe.** No heliponto, o portão se fecha atrás de você e o **Colosso** ataca:
    - Ele investe em linha reta e pisa no chão em área.
    - Ele chama raptores nas fases de vida.
