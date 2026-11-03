@@ -113,7 +113,7 @@ function objectiveAct2() {
   if (ev === 'charges') return ['Proteja as cargas enquanto elas armam!', 'ninho'];
   if (D.fuse > 0) return ['Afaste-se do ninho! Detonação em ' + Math.ceil(D.fuse) + ' s', 'ninho'];
   if (!F.brandt) return ['Prenda o Brandt no cais antes que o barco ligue', 'ninho'];
-  if (!F.nestDestroyed) return ['Prenda Brandt, plante cargas (opcional) ou aperte E na marca H para sair', 'ninho'];
+  if (!F.nestDestroyed) return [F.brandt === 'escaped' ? 'Brandt fugiu — plante cargas (opcional) ou aperte E na marca H' : 'Brandt capturado — plante cargas (opcional) ou aperte E na marca H', 'ninho'];
   return ['Aperte E na marca H da clareira para chamar o Garça-1', 'ninho'];
 }
 
