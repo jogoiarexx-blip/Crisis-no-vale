@@ -44,3 +44,5 @@ Preservar o jogo e seus eventos existentes; alinhar escolha do jogador, roteiro,
 **IA antes:** som equivalia a detecção exata do jogador; busca após perder linha de visão não tinha memória nem campo visual. **IA depois:** investigação de ruído, visão com oclusão, memória da última posição e retorno à patrulha; ataques diretos exigem visada. 
 
 **Teste automatizado:** `node --test tests/coherence.test.mjs` valida funções puras de percepção e memória dos encontros. **Pendente:** teste humano/navegador do fluxo completo, paredes, raio de som, fuga e retorno a cada uma das nove áreas, save/load durante e após alertas.
+
+**Ajuste de QA:** apenas dano novo desperta a patrulha sem visão. HP reduzido carregado de save não reativa perseguição sem contato. Coberto por teste puro adicional.

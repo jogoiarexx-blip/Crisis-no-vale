@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canHearNoise, canSeeTarget } from '../js/perception.mjs';
+import { canHearNoise, canSeeTarget, sufferedNewHit } from '../js/perception.mjs';
 import { captureEncounterMemory, restoreEncounterMemory } from '../js/encounter-memory.mjs';
 
 test('som audível em espaço aberto; paredes abafam ruídos distantes', () => {
@@ -8,6 +8,11 @@ test('som audível em espaço aberto; paredes abafam ruídos distantes', () => {
   assert.equal(canHearNoise(12, 15, true), false);
   assert.equal(canHearNoise(3, 15, true), true);
   assert.equal(canHearNoise(19, 15, false), false);
+});
+test('ferimento antigo não reinicia perseguição; novo tiro provoca reação', () => {
+  assert.equal(sufferedNewHit(55, 30), true);
+  assert.equal(sufferedNewHit(30, 30), false);
+  assert.equal(sufferedNewHit(30, 55), false);
 });
 test('visão precisa de ângulo/linha de visão; inimigo alerta vê perifericamente', () => {
   assert.equal(canSeeTarget(10, 0.8, 16, false), true);

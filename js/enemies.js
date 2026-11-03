@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { scene, camera, resolve, castWorld, freeSpot, bounds, GLOW, flashAt, onMaterialsReset } from './world.js';
 import { ENEMY_TYPES, COLORS } from './config.js';
-import { AI_MEMORY_SECONDS, AI_INVESTIGATE_SECONDS, canHearNoise, canSeeTarget } from './perception.mjs';
+import { AI_MEMORY_SECONDS, AI_INVESTIGATE_SECONDS, canHearNoise, canSeeTarget, sufferedNewHit } from './perception.mjs';
 import { G } from './state.js';
 import { player, hurtPlayer } from './player.js';
 import { survivor, hurtSurvivor } from './npc.js';
@@ -205,7 +205,7 @@ export function spawnEnemy(type, x, z, opts = {}) {
     type, cfg: T, pos: new THREE.Vector3(x, 0, z), home: { x, z }, hp: T.hp, maxHp: T.hp,
     yaw: alert ? Math.atan2(player.pos.x - x, player.pos.z - z) : Math.random() * Math.PI * 2,
     atkCd: 1, special: rand(1, 3), stun: 0, flashT: 0, bite: 0, lunge: 0, spitT: 0, windup: 0, charge: 0, cdx: 0, cdz: 0,
-    stomp: 0, stompCd: 3, phaseIdx: 0, alert, alertT: alert ? AI_MEMORY_SECONDS : 0,
+    stomp: 0, stompCd: 3, phaseIdx: 0, alert, lastHp: T.hp, alertT: alert ? AI_MEMORY_SECONDS : 0,
     lastSeen: { x: player.pos.x, z: player.pos.z }, investigate: null,
     dmg0: G.dmgTaken || 0, wanderA: Math.random() * 6.28, ambientIdx: opts.ambientIdx,
     kx: 0, kz: 0, phase: 0, seed: Math.random() * 100, flank: (Math.random() < 0.5 ? -1 : 1) * rand(0.3, 0.8), dead: false, deadT: 0, fallDir: 1, remove: false,
@@ -219,7 +219,7 @@ export function makeNoise(x, z, r) {
   for (const e of enemies) {
     if (e.dead) continue;
     const d = Math.hypot(e.pos.x - x, e.pos.z - z);
-    if (d > r || d < 0.001 && !canHearNoise(d, r)) continue;
+    if (d > r) continue;
     const obstructed = d > 0.01 && castWorld(e.pos.x, e.pos.z, (x - e.pos.x) / d, (z - e.pos.z) / d, d, 1.5) < d - 0.5;
     if (!canHearNoise(d, r, obstructed)) continue;
     if (e.alert) { e.lastSeen = { x, z }; e.alertT = AI_MEMORY_SECONDS; }
@@ -311,10 +311,12 @@ function updateEnemy(e, dt) {
   const blocked = nearSight && visualDist > 0.001 &&
     castWorld(e.pos.x, e.pos.z, vx / visualDist, vz / visualDist, visualDist, 1.5) < visualDist - 0.5;
   const sees = !player.dead && nearSight && canSeeTarget(visualDist, facingDot, visualRange, blocked, e.alert);
+  const hitNow = sufferedNewHit(e.lastHp ?? e.maxHp, e.hp);
+  e.lastHp = e.hp;
   if (sees) {
     if (!e.alert) alertEnemy(e);
     e.lastSeen = { x: tx, z: tz }; e.alertT = AI_MEMORY_SECONDS; e.investigate = null;
-  } else if (e.hp < e.maxHp && !e.alert) {
+  } else if (hitNow && !e.alert) {
     // Sofrer um tiro revela a ameaça, mesmo fora do campo de visão.
     alertEnemy(e);
   } else if (e.alert && !T.boss && !player.dead) {

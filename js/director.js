@@ -130,6 +130,7 @@ function spawnAreaContents(a) {
     // Restaura sem rugido/partículas extras: o dinossauro nunca deixou o cenário.
     const e = spawnEnemy(m.type, m.x, m.z, { alert: false, ambientIdx: Number.isInteger(m.ambientIdx) ? m.ambientIdx : undefined });
     e.hp = Math.min(e.maxHp, Math.max(1, Number.isFinite(m.hp) ? m.hp : e.maxHp));
+    e.lastHp = e.hp; // HP antigo de save não equivale a um novo disparo
     if (Number.isFinite(m.yaw)) e.yaw = m.yaw;
     if (m.home && Number.isFinite(m.home.x) && Number.isFinite(m.home.z)) e.home = { ...m.home };
     e.alert = !!m.alert; e.alertT = Number.isFinite(m.alertT) ? m.alertT : 0;
