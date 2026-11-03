@@ -731,6 +731,7 @@ export function updateDirector(dt) {
   for (let i = timers.length - 1; i >= 0; i--) { timers[i].t -= dt; if (timers[i].t <= 0) { const f = timers[i].fn; timers.splice(i, 1); f(); } }
   if (D.trans) { updateTransition(dt); return; }
   const a = D.area;
+  const nest = a && a.id === 'ninho'; // utilizado no controle de Brandt, ovos e barco
   // fila de spawns
   for (let i = D.queue.length - 1; i >= 0; i--) {
     const q = D.queue[i]; q.t -= dt; if (q.t > 0) continue;
