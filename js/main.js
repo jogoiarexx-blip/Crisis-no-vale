@@ -15,7 +15,7 @@ import { fire, throwGrenade, updateCombat, clearPickups, pickups, damageEnemy } 
 import { updateSurvivor, hideSurvivor, survivor } from './npc.js';
 import { updateBrandt, hideBrandt, brandt } from './brandt.js';
 import { AREAS, AREA, buildArea, builtCount, isBuilt } from './areas.js';
-import { D, startCampaign, updateDirector, updateHeli, hudData, interact, hasSave, setWinHandler, endStats, currentObjective, debugGoto, debugFlags, warmArea, streamStats, ambienceNow } from './director.js';
+import { D, startCampaign, updateDirector, updateHeli, hudData, interact, skipPassage, hasSave, setWinHandler, endStats, currentObjective, debugGoto, debugFlags, warmArea, streamStats, ambienceNow } from './director.js';
 import { readSave } from './state.js';
 import { quality, setQualityMode, autoQualityTick, applyQualityNow, onQuality, MODE_LABEL, PRESETS } from './quality.js';
 import { nextFrame, idleBusy } from './idle.js';
@@ -69,6 +69,7 @@ function setPause(p) {
   }
 }
 function toMenu() {
+  G.transitioning = false; D.trans = null; ui.hidePassage();
   setState('menu'); story.clearSpeech(); clearEnemies(); clearPickups(); clearFx(); ui.clearFloaters(); ui.clearMessages(); hideSurvivor(); hideBrandt(); resetPlayer(); ui.setFade(0);
   ui.setHasSave(hasSave()); ui.showScreen('menu'); refreshCharacterButtons(); unlockPointer();
 }
@@ -105,6 +106,11 @@ const inputHandlers = {
     if (code === 'KeyB') { ui.feed(ui.STR.bloom(toggleBloom()), '#cde'); return; }
     if (G.state === 'loading') return;
     if (G.state === 'play') {
+      if (D.trans) {
+        if (code === 'KeyE' || code === 'Space' || code === 'Enter') skipPassage();
+        else if (code === 'KeyP' || code === 'Escape') setPause(true);
+        return;
+      }
       if (code === 'KeyR') startReload();
       if (code === 'Digit1') switchWeapon(0);
       if (code === 'Digit2') { if (bag.owned[1]) switchWeapon(1); else ui.feed('Você ainda não tem a escopeta', '#a09070'); }
@@ -128,9 +134,10 @@ const inputHandlers = {
   onCanvasDown() { initAudio(); },
   onLockLost() { if (G.state === 'play' && !ui.mapOpen()) setPause(true); },
   onBlur() { if (G.state === 'play') setPause(true); },
-  onWheel(dir) { if (G.state === 'play') cycleWeapon(dir); },
+  onWheel(dir) { if (G.state === 'play' && !D.trans) cycleWeapon(dir); },
 };
 initInput(renderer.domElement, inputHandlers);
+$('passageSkip').onclick = () => skipPassage();
 let selectedCharacter = 'marina', heroBusy = false, jillUnlockedSession = false;
 function isJillUnlocked() { try { return jillUnlockedSession || G.best > 0 || localStorage.getItem('crise-no-vale-jill-unlocked') === '1'; } catch (e) { return jillUnlockedSession || G.best > 0; } }
 function refreshCharacterButtons() {
@@ -166,9 +173,9 @@ const clock = new THREE.Clock();
 function update(dt) {
   G.time += dt;
   updateWorld(dt);
-  story.updateStory(dt);
+  if (!D.trans) story.updateStory(dt);
   if (G.state === 'play' || G.state === 'over' || G.state === 'win') {
-    if (G.state === 'play') G.elapsed += dt;
+    if (G.state === 'play' && !D.trans) G.elapsed += dt;
     // Durante o fade nenhum ator ou projétil continua avançando fora da tela.
     if (!D.trans) {
       updatePlayer(dt);
@@ -201,6 +208,11 @@ function loop() {
   if (inGame) { const [k, m] = ambienceNow(); setAmbience(k, m); } else setAmbience('menu');
   setMuffle(G.state === 'pause' || G.state === 'story' || G.state === 'terminal');
   if (G.state === 'menu' || story.cinematic()) menuCamera(dt); else if (G.state !== 'pause') updateCamera(dt);
+  // Pequeno enquadramento, sem geometrias ou luzes adicionais.
+  if (G.state === 'play' && D.trans?.sceneActive && !SETTINGS.reducedMotion) {
+    const t = D.trans.sceneTime / D.trans.scene.duration;
+    camera.fov -= 2.5 * Math.sin(Math.PI * t); camera.updateProjectionMatrix();
+  }
   // v9: LOD por distância da câmera (cenário a ~6 Hz; inimigos leem o nível em updateEnemies)
   updateLod(dt, D.area ? D.area.ctx : null);
   const h = D.area ? hudData() : EMPTY;

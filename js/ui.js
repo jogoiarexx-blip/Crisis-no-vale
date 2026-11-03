@@ -56,6 +56,11 @@ export function initUI(hasSave) {
 }
 export function setHasSave(on) { el.continueBtn.classList.toggle('hidden', !on); el.continueEndBtn.classList.toggle('hidden', !on); }
 export function setFade(v) { el.fade.style.opacity = v.toFixed(3); }
+export function showPassage(scene) {
+  $('passageTitle').textContent = scene.title; $('passageText').textContent = scene.text;
+  $('passageHint').textContent = scene.hint; $('passageScene').hidden = false;
+}
+export function hidePassage() { $('passageScene').hidden = true; }
 export function toggleMap(on) { el.mapOv.classList.toggle('on', on); if (on) { lastMini = -1e9; lastBig = -1e9; } } // força redesenho imediato
 export const mapOpen = () => el.mapOv.classList.contains('on');
 

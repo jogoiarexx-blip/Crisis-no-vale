@@ -213,3 +213,16 @@ code{background:#0c1a10;padding:1px 5px;border-radius:3px;color:#cfe9a8}
 #tl .epv{color:#ffe08a;margin-left:4px}
 body.rm .term-box{animation:none!important}
 @media (prefers-reduced-motion:reduce){.term-box{animation:none!important}}
+
+/* Cenas curtas usam o cenário existente e respeitam a pausa. */
+#passageScene[hidden]{display:none}
+#passageScene{position:fixed;inset:0;z-index:6;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between}
+#passageScene .passage-top{height:7vh;background:#030504}
+#passageScene .passage-bottom{min-height:19vh;background:linear-gradient(transparent,rgba(2,5,3,.96) 30%);padding:24px max(5vw,20px) 16px;display:flex;align-items:end;justify-content:space-between;gap:16px}
+#passageScene .passage-copy{max-width:760px;text-shadow:0 2px 4px #000}
+#passageTitle{font-size:clamp(17px,2vw,24px);letter-spacing:3px;color:#d5eeb8}
+#passageText{font-size:clamp(14px,1.4vw,17px);line-height:1.4;margin:5px 0;color:#f1f5ef}
+#passageHint{font-size:13px;color:#e7cf93}
+#passageSkip{pointer-events:auto;font-size:11px;letter-spacing:1px;padding:8px 12px;margin:0;white-space:nowrap;background:#14261a}
+#pause{z-index:10}
+@media(max-width:640px){#passageScene .passage-bottom{display:block;padding-top:18px}#passageSkip{margin-top:8px}}

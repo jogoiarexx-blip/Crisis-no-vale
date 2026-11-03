@@ -33,7 +33,7 @@ export function pollGamepad(dt, h) {
   const btn = (i) => { const b = gp.buttons[i]; return !!(b && (b.pressed || b.value > 0.5)); };
   const play = G.state === 'play';
   pad.mx = play ? ax(0) : 0; pad.mz = play ? -ax(1) : 0;
-  if (play) {
+  if (play && !G.transitioning) {
     const lx = ax(2), ly = ax(3), s = (G.aiming ? AIM_LOOK : LOOK_SPEED) * SETTINGS.sens * dt, iy = SETTINGS.invertY ? -1 : 1;
     G.yaw -= lx * Math.abs(lx) * s;
     G.pitch = clamp(G.pitch - ly * Math.abs(ly) * s * 0.7 * iy, CAMERA.PITCH_MIN, CAMERA.PITCH_MAX);

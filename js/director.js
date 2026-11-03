@@ -6,11 +6,13 @@ import { captureEncounterMemory, restoreEncounterMemory } from './encounter-memo
 import { G, writeSave, readSave, addEp } from './state.js';
 import { normalizeStreak, finishStreak } from './clean-streak.mjs';
 import { safeDoorArrival } from './door-safety.mjs';
+import { passageFor, advancePassage } from './passage-scenes.mjs';
+import { clearInput } from './input.js';
 import { canTriggerRevisit, scheduleRevisit, rearmPendingWarnings } from './revisit-encounters.mjs';
 import { AREAS, AREA, doorArrival, buildArea, unloadArea, isBuilt, neighbors, onAreaBuilt } from './areas.js';
 import { quality } from './quality.js';
 import { idle } from './idle.js';
-import { player, placePlayer, snapshotBag, restoreBag, resetPlayer } from './player.js';
+import { player, pg, placePlayer, snapshotBag, restoreBag, resetPlayer } from './player.js';
 import { openTerminal } from './shop.js';
 import { enemies, spawnEnemy, clearEnemies, enemyEvents, makeNoise } from './enemies.js';
 import { spawnPickup, clearPickups, combatEvents, resetCombat } from './combat.js';
@@ -43,7 +45,7 @@ const CONTROL_SPOT = { x: 19.6, z: -16 };
 function resetCampaign() {
   for (const k in F) delete F[k];
   D.st = Object.fromEntries(AREAS.map((a) => [a.id, freshArea()]));
-  D.enc = new Set(); D.visited = new Set(); D.queue = []; D.trans = null; D.event = null; D.boss = null; D.objectives = 0;
+  D.enc = new Set(); D.visited = new Set(); D.queue = []; D.trans = null; G.transitioning = false; ui.hidePassage(); D.event = null; D.boss = null; D.objectives = 0;
   D.heli = null; D.barkT = 12; D.wasDown = false; D.talkI = 0;
   if (D.lockdown) endLockdown(true); D.lockdown = null;
   D.brandtT = 0; D.fuse = 0; D.survivorMemory = null; hideBrandt();
@@ -359,7 +361,9 @@ function startTransition(door) {
     if (!isBuilt(destination)) { const ms = buildArea(destination); streamStats.syncBuilds++; streamStats.lastSyncMs = Math.round(ms); }
     const arrival = safeDoorArrival(destination, door.toDoor, player.r, WORLD.DOOR_DEPTH);
     if (!arrival) throw new Error('Nenhum ponto livre próximo à porta de destino');
-    D.trans = { t: 0, door, arrival, switched: false };
+    const scene = passageFor(D.area.id, destination.id, D.st[destination.id].visited, story.S.said);
+    D.trans = { t: 0, door, arrival, scene, sceneActive:false, sceneTime:0, switched: false };
+    G.transitioning = true; clearInput(); story.clearSpeech(); pg.visible = true;
   } catch (error) {
     console.error('Não foi possível preparar a passagem:', error);
     ui.feed('Não foi possível abrir a passagem. Tente novamente.', '#ff8a70');
@@ -368,8 +372,21 @@ function startTransition(door) {
   player.inv = Math.max(player.inv, WORLD.FADE * 2 + 0.6);
   sfx.door();
 }
+export function skipPassage() {
+  const T = D.trans;
+  if (G.state !== 'play' || !T?.sceneActive) return false;
+  clearInput(); ui.hidePassage(); D.trans = null; G.transitioning = false; ui.setFade(0);
+  return true;
+}
 function updateTransition(dt) {
-  const T = D.trans; T.t += dt;
+  const T = D.trans;
+  if (T.sceneActive) {
+    const progress = advancePassage(T.sceneTime, dt, T.scene.duration);
+    T.sceneTime = progress.time;
+    if (progress.done) skipPassage();
+    return;
+  }
+  T.t += dt;
   const f = WORLD.FADE;
   if (!T.switched && T.t >= f) {
     enterArea(T.door.to, T.door.toDoor, T.arrival); // destino já preparado e ponto livre
@@ -381,7 +398,11 @@ function updateTransition(dt) {
   }
   if (T.hold > 0) { T.hold -= dt; T.t = f; ui.setFade(1); return; }
   ui.setFade(T.t < f ? T.t / f : Math.max(0, 1 - (T.t - f) / f));
-  if (T.t >= f * 2) { D.trans = null; ui.setFade(0); }
+  if (T.t >= f * 2) {
+    ui.setFade(0);
+    if (T.scene) { T.sceneActive = true; story.S.said.add(T.scene.key); ui.showPassage(T.scene); }
+    else { D.trans = null; G.transitioning = false; }
+  }
 }
 
 // ---------- streaming de áreas (melhor esforço) ----------
@@ -764,8 +785,8 @@ combatEvents.onWorldPickup = (id) => { if (D.area) D.st[D.area.id].taken.push(id
 
 // ---------- atualização por quadro ----------
 export function updateDirector(dt) {
-  for (let i = timers.length - 1; i >= 0; i--) { timers[i].t -= dt; if (timers[i].t <= 0) { const f = timers[i].fn; timers.splice(i, 1); f(); } }
   if (D.trans) { updateTransition(dt); return; }
+  for (let i = timers.length - 1; i >= 0; i--) { timers[i].t -= dt; if (timers[i].t <= 0) { const f = timers[i].fn; timers.splice(i, 1); f(); } }
   const a = D.area;
   const nest = a && a.id === 'ninho'; // utilizado no controle de Brandt, ovos e barco
   // fila de spawns
