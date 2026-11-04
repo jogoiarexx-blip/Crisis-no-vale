@@ -40,12 +40,12 @@ export function limitTextures(root, maxSize = 1024) {
     }
   });
 }
-export function fitWeapon(model, length) {
+export function fitWeapon(model, length, rotationY = -Math.PI / 2) {
   model.updateMatrixWorld(true);
   const b = new THREE.Box3().setFromObject(model), size = b.getSize(new THREE.Vector3());
   if (!Number.isFinite(size.x) || size.x <= 0) throw new Error('Arma sem dimensões válidas');
   // Os três modelos enviados usam eixo X para o comprimento.
   const holder = new THREE.Group(), center = b.getCenter(new THREE.Vector3());
-  model.position.sub(center); holder.add(model); holder.rotation.y = -Math.PI / 2;
+  model.position.sub(center); holder.add(model); holder.rotation.y = rotationY;
   holder.scale.setScalar(length / size.x); return holder;
 }

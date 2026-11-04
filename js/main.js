@@ -206,6 +206,11 @@ function loop() {
   if (inGame) { const [k, m] = ambienceNow(); setAmbience(k, m); } else setAmbience('menu');
   setMuffle(G.state === 'pause' || G.state === 'story' || G.state === 'terminal' || G.state === 'archive');
   if (G.state === 'menu' || story.cinematic()) menuCamera(dt); else if (G.state !== 'pause') updateCamera(dt);
+  // Plano fixo da travessia enquadra a abertura, a passagem e o fechamento.
+  if (G.state === 'play' && D.trans?.shot) {
+    const s = D.trans.shot;
+    camera.position.set(s.x, s.y, s.z); camera.lookAt(s.tx, s.ty, s.tz);
+  }
   // Pequeno enquadramento, sem geometrias ou luzes adicionais.
   if (G.state === 'play' && D.trans?.sceneActive && !SETTINGS.reducedMotion) {
     const t = D.trans.sceneTime / D.trans.scene.duration;

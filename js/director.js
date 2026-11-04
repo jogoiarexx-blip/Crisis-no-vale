@@ -8,12 +8,13 @@ import { G, writeSave, readSave, addEp } from './state.js';
 import { normalizeStreak, finishStreak } from './clean-streak.mjs';
 import { safeDoorArrival } from './door-safety.mjs';
 import { passageFor, advancePassage } from './passage-scenes.mjs';
+import { doorPose, doorVectors, DOOR_TIMING } from './door-cinematic.mjs';
 import { clearInput } from './input.js';
 import { canTriggerRevisit, scheduleRevisit, rearmPendingWarnings } from './revisit-encounters.mjs';
 import { AREAS, AREA, doorArrival, buildArea, unloadArea, isBuilt, neighbors, onAreaBuilt } from './areas.js';
 import { quality } from './quality.js';
 import { idle } from './idle.js';
-import { player, pg, placePlayer, snapshotBag, restoreBag, resetPlayer } from './player.js';
+import { player, pg, placePlayer, snapshotBag, restoreBag, resetPlayer, animateDoorWalk } from './player.js';
 import { openTerminal } from './shop.js';
 import { enemies, spawnEnemy, clearEnemies, enemyEvents, makeNoise } from './enemies.js';
 import { spawnPickup, clearPickups, combatEvents, resetCombat } from './combat.js';
@@ -165,7 +166,7 @@ function syncGates(a, instant) {
     const ref = a.refs.doors[d.id]; if (!ref) continue;
     const open = !isLocked(a.id, d.id);
     ref.open = open;
-    if (instant) ref.gate.position.y = open ? -3.4 : 0;
+    if (instant) ref.gate.position.y = 0; // destrancada permanece fechada até interação
     setDoorLight(ref, open);
   }
 }
@@ -357,22 +358,45 @@ function setTimeoutGame(t, fn) { if (t <= 0) fn(); else timers.push({ t, fn }); 
 function cardWhenFree(pages, cb) { if (D.trans || G.state !== 'play') setTimeoutGame(0.3, () => cardWhenFree(pages, cb)); else story.showCard(pages, cb); }
 
 function startTransition(door) {
-  const destination = AREA[door.to];
-  try {
-    if (!isBuilt(destination)) { const ms = buildArea(destination); streamStats.syncBuilds++; streamStats.lastSyncMs = Math.round(ms); }
-    const arrival = safeDoorArrival(destination, door.toDoor, player.r, WORLD.DOOR_DEPTH);
-    if (!arrival) throw new Error('Nenhum ponto livre próximo à porta de destino');
-    const scene = passageFor(D.area.id, destination.id, D.st[destination.id].visited, story.S.said);
-    D.trans = { t: 0, door, arrival, scene, sceneActive:false, sceneTime:0, switched: false };
-    G.transitioning = true; clearInput(); story.clearSpeech(); pg.visible = true;
-  } catch (error) {
-    console.error('Não foi possível preparar a passagem:', error);
-    ui.feed('Não foi possível abrir a passagem. Tente novamente.', '#ff8a70');
-    return;
-  }
+  const destination = AREA[door.to], ref = D.area.refs.doors[door.id], dir = doorVectors(door.side);
+  if (!destination || !ref || !dir || D.trans) return;
+  const center = ref.group.position;
+  const T = D.trans = {
+    t: 0, door, ref, destination, dir, ready: false, error: null,
+    from: { x: pg.position.x, z: pg.position.z, yaw: G.yaw },
+    end: { x: center.x + dir.x * 0.75, z: center.z + dir.z * 0.75 },
+    shot: { x: center.x - dir.x * 6.5 + dir.z * 0.8, y: 2.3, z: center.z - dir.z * 6.5 - dir.x * 0.8,
+      tx: center.x, ty: 1.55, tz: center.z },
+    scene: passageFor(D.area.id, destination.id, D.st[destination.id].visited, story.S.said),
+    sceneActive: false, sceneTime: 0, switched: false, preparing: false, closingSound: false,
+  };
+  G.transitioning = true; clearInput(); story.clearSpeech(); pg.visible = true;
   player.inv = Math.max(player.inv, WORLD.FADE * 2 + 0.6);
-  sfx.door();
+  sfx.doorOpen();
 }
+// Deixa pelo menos um quadro da abertura aparecer antes de preparar o destino.
+// A construção é síncrona no navegador; o pré-carregamento vizinho continua ativo.
+function prepareTransition(T) {
+  if (T.preparing) return;
+  T.preparing = true;
+  requestAnimationFrame(() => setTimeout(() => {
+    if (D.trans !== T) return;
+    try {
+      if (!isBuilt(T.destination)) { const ms = buildArea(T.destination); streamStats.syncBuilds++; streamStats.lastSyncMs = Math.round(ms); }
+      T.arrival = safeDoorArrival(T.destination, T.door.toDoor, player.r, WORLD.DOOR_DEPTH);
+      if (!T.arrival) throw new Error('Nenhum ponto livre próximo à porta de destino');
+      T.ready = true;
+    } catch (error) { T.error = error; }
+  }, 0));
+}
+function cancelTransition(T) {
+  console.error('Não foi possível preparar a passagem:', T.error);
+  T.ref.gate.position.y = 0; pg.position.set(T.from.x, 0, T.from.z); pg.rotation.y = T.from.yaw;
+  G.yaw = T.from.yaw; player.moving = false; player.spd = 0;
+  clearInput(); D.trans = null; G.transitioning = false; ui.setFade(0);
+  ui.feed('Não foi possível abrir a passagem. Tente novamente.', '#ff8a70');
+}
+
 export function skipPassage() {
   const T = D.trans;
   if (G.state !== 'play' || !T?.sceneActive) return false;
@@ -387,23 +411,31 @@ function updateTransition(dt) {
     if (progress.done) skipPassage();
     return;
   }
+  if (T.error) { cancelTransition(T); return; }
+  if (T.switched) {
+    T.fadeIn = Math.min(1, T.fadeIn + dt / WORLD.FADE);
+    ui.setFade(1 - T.fadeIn);
+    if (T.fadeIn >= 1) {
+      ui.setFade(0);
+      if (T.scene) { T.sceneActive = true; story.S.said.add(T.scene.key); ui.showPassage(T.scene); }
+      else { D.trans = null; G.transitioning = false; }
+    }
+    return;
+  }
   T.t += dt;
-  const f = WORLD.FADE;
-  if (!T.switched && T.t >= f) {
-    enterArea(T.door.to, T.door.toDoor, T.arrival); // destino já preparado e ponto livre
-    T.switched = true;
-    const result = finishStreak(G.cleanStreak);
-    if (result.bonus) { addEp(result.bonus); ui.feed(`Travessia limpa: ${result.kills} abates · +${result.bonus} PE`, '#9fe8ff'); }
-    streamAround(D.area);
-    T.t = f; T.hold = 0.06; // segura a tela preta um instante: o 1º quadro da nova área (shaders/upload) fica escondido
-  }
-  if (T.hold > 0) { T.hold -= dt; T.t = f; ui.setFade(1); return; }
-  ui.setFade(T.t < f ? T.t / f : Math.max(0, 1 - (T.t - f) / f));
-  if (T.t >= f * 2) {
-    ui.setFade(0);
-    if (T.scene) { T.sceneActive = true; story.S.said.add(T.scene.key); ui.showPassage(T.scene); }
-    else { D.trans = null; G.transitioning = false; }
-  }
+  if (T.t >= 0.12) prepareTransition(T);
+  const pose = doorPose(T.t, T.ready);
+  T.ref.gate.position.y = pose.gate * 3.45;
+  if (!T.closingSound && T.t >= DOOR_TIMING.walkEnd) { T.closingSound = true; sfx.doorClose(); }
+  const point = { x: T.from.x + (T.end.x - T.from.x) * pose.travel, z: T.from.z + (T.end.z - T.from.z) * pose.travel };
+  animateDoorWalk(dt, point, T.dir.yaw, pose.moving);
+  ui.setFade(pose.fade);
+  if (!pose.switchArea) return;
+  enterArea(T.door.to, T.door.toDoor, T.arrival);
+  T.switched = true; T.shot = null; T.fadeIn = 0;
+  const result = finishStreak(G.cleanStreak);
+  if (result.bonus) { addEp(result.bonus); ui.feed(`Travessia limpa: ${result.kills} abates · +${result.bonus} PE`, '#9fe8ff'); }
+  streamAround(D.area);
 }
 
 // ---------- streaming de áreas (melhor esforço) ----------
@@ -823,7 +855,7 @@ export function updateDirector(dt) {
   for (const d of a.doors) {
     const ref = a.refs.doors[d.id], open = !isLocked(a.id, d.id);
     if (ref.open !== open) { ref.open = open; setDoorLight(ref, open); if (open) sfx.door(); }
-    ref.gate.position.y = damp(ref.gate.position.y, open ? -3.4 : 0, 3, dt);
+    ref.gate.position.y = damp(ref.gate.position.y, 0, 3, dt);
   }
   // escolta: chegou ao terminal de controle
   if (a.id === 'patio' && F.escort && !F.heliCode && !D.event && survivor.following) {

@@ -465,10 +465,11 @@ export function doorway(ctx, side, at, b, label = 'gate') {
   const stripe = boxMesh(MATS.stripe, span, 0.12, 0.6); stripe.position.y = hgt - 0.35;
   const plate = boxMesh(MATS.post, span, 0.05, 1.4); plate.position.y = 0.025;
   g.add(pL, pR, top, stripe, plate);
-  // folha do portão (grade) — desce no chão quando abre
+  // Porta sólida reforçada, visível mesmo quando destrancada; sobe apenas na travessia.
   const gate = new THREE.Group(); gate.position.y = 0;
-  for (let i = -5; i <= 5; i++) { const bar = boxMesh(MATS.rust, 0.08, hgt - 0.3, 0.08); bar.position.set(i * 0.4, (hgt - 0.3) / 2, 0); gate.add(bar); }
-  for (const y of [0.4, 1.6, 2.9]) { const bar = boxMesh(MATS.rust, span - 0.2, 0.1, 0.1); bar.position.y = y; gate.add(bar); }
+  const panel = boxMesh(MATS.metal, span - 0.32, hgt - 0.35, 0.17); panel.position.y = (hgt - 0.35) / 2; gate.add(panel);
+  for (let i = -5; i <= 5; i++) { const bar = boxMesh(MATS.rust, 0.08, hgt - 0.3, 0.08); bar.position.set(i * 0.4, (hgt - 0.3) / 2, 0.12); gate.add(bar); }
+  for (const y of [0.4, 1.6, 2.9]) { const bar = boxMesh(MATS.rust, span - 0.2, 0.1, 0.1); bar.position.y = y; bar.position.z = 0.13; gate.add(bar); }
   g.add(gate);
   const lightMat = new THREE.SpriteMaterial({ map: GLOW, color: 0xff3030, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
   const light = new THREE.Sprite(lightMat); light.scale.setScalar(1.1); light.position.set(span / 2 + 0.1, hgt - 0.6, 0.38 * inward); g.add(light);

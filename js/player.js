@@ -98,7 +98,7 @@ function showGun(i) {
   loadModel(spec.url, spec.parts || 0).then(gltf => {
     const model = gltf.scene; limitTextures(model);
     model.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; } });
-    const fitted = fitWeapon(model, spec.length); fitted.position.set(...spec.pos);
+    const fitted = fitWeapon(model, spec.length, spec.rotationY); fitted.position.set(...spec.pos);
     for (const child of container.children) child.visible = false;
     container.add(fitted); modelGuns[i] = fitted;
     if (arms.cur === i) showGun(i); // atualiza o clarão quando o GLB substituir a reserva
@@ -520,6 +520,23 @@ export function resetPlayer() {
   arms.cur = 0; arms.cool = 0; arms.reloading = 0; showGun(0); armKick = armSwap = 0;
   G.yaw = Math.PI; G.pitch = -0.12; G.aiming = false;
   snapCamera();
+}
+
+// Move só a representação da personagem durante a cena; a posição de jogo muda na chegada.
+export function animateDoorWalk(dt, point, yaw, moving) {
+  const prevX = pg.position.x, prevZ = pg.position.z;
+  pg.position.set(point.x, 0, point.z); pg.rotation.y = yaw; pg.visible = true;
+  G.yaw = yaw; G.aiming = false;
+  player.vx = moving ? (point.x - prevX) / Math.max(dt, 0.001) : 0;
+  player.vz = moving ? (point.z - prevZ) / Math.max(dt, 0.001) : 0;
+  player.spd = moving ? Math.max(0.8, Math.hypot(player.vx, player.vz)) : 0;
+  player.moving = moving; player.running = false;
+  if (!hero.ok) {
+    player.phase += moving ? dt * 8 : 0;
+    const sw = moving ? Math.sin(player.phase) * 0.55 : 0;
+    legL.rotation.x = sw; legR.rotation.x = -sw;
+  }
+  updateHero(dt, motionK());
 }
 
 // ---------- atualização ----------
