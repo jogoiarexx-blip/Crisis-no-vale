@@ -64,7 +64,7 @@ function finishEnd() {
 }
 function setPause(p) {
   if (p && G.state === 'play') { setState('pause'); clearInput(); ui.setPauseText('Objetivo: ' + currentObjective()); ui.showScreen('pause'); unlockPointer(); }
-  else if (!p && G.state === 'pause') {
+  else if (!p && G.state === 'pause' && !heroBusy) {
     setState('play'); ui.showScreen('hud'); lockPointer();
     setTimeout(() => { if (G.state === 'play' && !mouse.locked && document.pointerLockElement === null) ui.feed(ui.STR.lockHint, '#cde'); }, 400);
   }
@@ -138,14 +138,20 @@ initInput(renderer.domElement, inputHandlers);
 $('passageSkip').onclick = () => skipPassage();
 let selectedCharacter = 'marina', heroBusy = false, jillUnlockedSession = false;
 function isJillUnlocked() { try { return jillUnlockedSession || G.best > 0 || localStorage.getItem('crise-no-vale-jill-unlocked') === '1'; } catch (e) { return jillUnlockedSession || G.best > 0; } }
+const characterSelectors = [
+  { marina: $('heroMarina'), jill: $('heroJill'), note: $('heroNote') },
+  { marina: $('pauseHeroMarina'), jill: $('pauseHeroJill'), note: $('pauseHeroNote') },
+];
 function refreshCharacterButtons() {
   const unlocked = isJillUnlocked();
-  $('heroMarina').disabled = heroBusy; $('heroJill').disabled = heroBusy || !unlocked;
-  $('heroMarina').classList.toggle('on', selectedCharacter === 'marina');
-  $('heroJill').classList.toggle('on', selectedCharacter === 'jill');
-  $('heroJill').textContent = unlocked ? 'Jill' : 'Jill — bloqueada';
-  $('heroNote').textContent = heroBusy ? 'Carregando personagem…' : unlocked ? 'Escolha o visual antes de começar ou continuar.' : 'Conclua um final para desbloquear Jill.';
-  $('startBtn').disabled = heroBusy; if ($('continueBtn')) $('continueBtn').disabled = heroBusy;
+  for (const group of characterSelectors) {
+    group.marina.disabled = heroBusy; group.jill.disabled = heroBusy || !unlocked;
+    group.marina.classList.toggle('on', selectedCharacter === 'marina');
+    group.jill.classList.toggle('on', selectedCharacter === 'jill');
+    group.jill.textContent = unlocked ? 'Jill' : 'Jill — bloqueada';
+    group.note.textContent = heroBusy ? 'Carregando personagem…' : unlocked ? 'Escolha Marina ou Jill.' : 'Conclua um final para desbloquear Jill.';
+  }
+  $('startBtn').disabled = heroBusy; $('continueBtn').disabled = heroBusy; $('resumeBtn').disabled = heroBusy;
 }
 async function chooseCharacter(choice) {
   if (heroBusy || (choice === 'jill' && !isJillUnlocked())) return;
@@ -153,10 +159,12 @@ async function chooseCharacter(choice) {
   const ok = await selectHero(choice);
   if (ok) { selectedCharacter = choice; try { localStorage.setItem('crise-no-vale-personagem', choice); } catch (e) {} }
   heroBusy = false; refreshCharacterButtons();
-  if (!ok) $('heroNote').textContent = 'Não foi possível carregar esse personagem. Tente novamente.';
+  if (!ok) for (const group of characterSelectors) group.note.textContent = 'Não foi possível carregar esse personagem. Tente novamente.';
 }
-$('heroMarina').onclick = () => chooseCharacter('marina');
-$('heroJill').onclick = () => chooseCharacter('jill');
+for (const group of characterSelectors) {
+  group.marina.onclick = () => chooseCharacter('marina');
+  group.jill.onclick = () => chooseCharacter('jill');
+}
 $('startBtn').onclick = () => startGame(false);
 $('continueBtn').onclick = () => startGame(true);
 $('restartBtn').onclick = () => startGame(false);

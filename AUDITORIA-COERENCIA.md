@@ -168,3 +168,28 @@ Base: commit 4a2cd4e. Revisão inicial publicada por solicitação do usuário, 
 **Limites:** construir uma área e iniciar a compilação ainda executam trabalho na thread principal; `compileAsync` depende do navegador e da GPU. Texturas e geometria podem ser enviadas apenas no primeiro desenho, materiais criados mais tarde podem gerar shaders novos e alterações de luzes/qualidade podem exigir variantes adicionais. Portanto, não se garante ausência de travamentos ou que todos os shaders futuros estejam aquecidos. Áreas temporariamente retidas durante compilação podem aumentar memória até outra troca. O teste visual responsivo, o percurso real e a medição de tempo/FPS em WebGL permanecem pendentes.
 
 **Testes:** 53 testes Node locais, incluindo serialização/deduplicação da fila, invalidação por qualidade/reconstrução, falha e nova tentativa, descarte de contexto obsoleto, passagem com compilação lenta e prazo de segurança. A aparência e a compilação real em GPU não foram certificadas neste ambiente.
+
+## Auditoria de execução e riscos — 04/11/2026
+
+**Escopo e limite:** foi aberta a versão publicada e examinada sua inicialização, além do código, modelos e testes locais. O console do navegador registrou `THREE.WebGLRenderer: Error creating WebGL context` e `GL_RENDERER = Disabled`; o botão de iniciar permaneceu indisponível. Assim, **não foi possível jogar nem concluir os dois atos**, cronometrar transições, capturar gameplay ou medir FPS. A falha observada diz respeito ao navegador deste ambiente; ela não comprova que o jogo falhe no computador do jogador.
+
+**Caminho a certificar em WebGL:** cais → ruínas → laboratório → pântano (gerador) → laboratório → pátio (Dra. Lima e código) → heliponto (Colosso). Verificar os dois ramos: extração do Ato 1 e margem → acampamento → ninho (Matriarca, Brandt e desfecho do Ato 2). Em cada área, testar ida e volta pelas portas, colisões, documentos, inimigos, munição e terminal; repetir após salvar/carregar e conferir os dois finais. Nenhum desses passos foi certificado visualmente nesta revisão.
+
+**Correções confirmadas por inspeção e testes controlados:**
+
+1. **P0 — aviso incorreto de salvamento:** `writeSave` podia retornar `false` quando o armazenamento era negado ou estava cheio, mas o terminal informava sucesso e bloqueava nova tentativa. Agora o terminal informa a falha e permite tentar novamente; vida, contador de saves e confirmação mudam apenas após gravação bem-sucedida. Testes simulam falha e sucesso. Não foi reproduzido com navegador gráfico ou armazenamento real bloqueado.
+2. **P1 — personagem na pausa:** os controles da pausa repetiam os IDs dos controles do menu principal; só os primeiros recebiam eventos e estado. Os seletores agora têm IDs distintos e são sincronizados, e a retomada aguarda o carregamento da personagem. Testes executam os handlers em ambiente simulado. A troca visual da malha continua pendente de inspeção no jogo.
+
+**Gargalos medidos nos arquivos, não no FPS:**
+
+| Modelo | Tamanho do GLB | Vértices | Triângulos |
+| --- | ---: | ---: | ---: |
+| Glock | 20,40 MiB | 521.935 | 866.323 |
+| MP5 | 14,04 MiB | 258.714 | 458.305 |
+| Escopeta | 0,79 MiB | 12.475 | 19.706 |
+| Dra. Lima | 10,28 MiB | 134.499 | 243.664 |
+| Jill | 3,76 MiB | 18.561 | 10.265 |
+
+A Glock e a MP5 são candidatas prioritárias a redução de malha e textura com comparação visual e medição antes/depois. A construção procedural de cenários ainda ocorre na thread principal, e o primeiro desenho pode enviar geometria e texturas à GPU; pré-compilar shaders não elimina esses custos. Chuva, pós-processamento e inimigos também devem ser medidos sob carga real antes de atribuir causa ao FPS. Os valores de geometria somam os atributos e índices declarados nas primitivas dos GLBs; não são medições de renderização.
+
+**Executado:** 58 testes Node passaram e a sintaxe de todos os módulos JS/MJS foi verificada. Os testes existentes cobrem, em ambientes isolados, grafo de portas, pontos nominais de chegada, combos, arquivo, memória de inimigos, navegação da escolta, cenas, shaders e integridade dos modelos. Eles não provam que portas, objetivos, sons, animações e finais funcionem numa partida real. A publicação e seus testes remotos devem ser consultados no commit desta revisão.

@@ -740,7 +740,6 @@ function terminalDanger() {
 
 // ---------- save / load ----------
 function saveGame(term) {
-  player.hp = PLAYER.HP; G.saves++;
   const a = D.area;
   rememberAreaThreats(a); // incluir posição, vida e busca dos inimigos no save
   const off = 1.6, yaw = term.group.rotation.y;
@@ -753,12 +752,14 @@ function saveGame(term) {
     flags: { ...F, escort: !!F.escort, bossFight: false, nestFight: false },
     survivor: a.id === 'patio' ? snapshotSurvivor() : D.survivorMemory,
     st: D.st, enc: [...D.enc],
-    bag: snapshotBag(), objectives: D.objectives, story: story.storySave(),
-    stats: { score: G.score, kills: G.kills, shots: G.shots, hits: G.hits, elapsed: G.elapsed, saves: G.saves },
+    bag: { ...snapshotBag(), hp: PLAYER.HP }, objectives: D.objectives, story: story.storySave(),
+    stats: { score: G.score, kills: G.kills, shots: G.shots, hits: G.hits, elapsed: G.elapsed, saves: G.saves + 1 },
   };
-  writeSave(data); ui.setHasSave(true);
+  if (!writeSave(data)) return false;
+  player.hp = PLAYER.HP; G.saves++; ui.setHasSave(true);
   sfx.save(); burst(player.pos.x, 1.2, player.pos.z, 'spark', 14, 2);
   ui.banner('PROGRESSO SALVO', 'Vida restaurada — ' + a.name, 2.2);
+  return true;
 }
 export function hasSave() { return !!readSave(); }
 
