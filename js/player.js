@@ -7,6 +7,8 @@ import { PLAYER, CAMERA, WEAPONS, COLORS, GRENADE, INVENTORY, PICKUPS, ARMOR, UP
 import { G } from './state.js';
 import { breakStreak } from './clean-streak.mjs';
 import { loadModel, limitTextures, fitWeapon } from './model-assets.js';
+import { adaptWalkClip } from './animation-retarget.mjs';
+import { GUN_SCALE, GUN_ASSETS as gunAssets } from './gun-layout.mjs';
 import { keys } from './input.js';
 import { pad } from './gamepad.js';
 import { SETTINGS, motionK } from './settings.js';
@@ -81,13 +83,12 @@ part(B(0.08, 0.18, 0.09), gunM, 0, -0.18, 0.52, smgMesh).rotation.x = 0.3;  // e
 part(B(0.04, 0.04, 0.32), gunM, 0, 0.0, 0.3, smgMesh);                   // coronha
 const gunMeshes = [pistolMesh, shotgunMesh, smgMesh];
 const modelGuns = [null, null, null], loadingGuns = [false, false, false];
-const gunAssets = [
-  {url:'assets/armas/glock.glb', parts:4, length:0.36, pos:[0,-0.06,0.68]},
-  {url:'assets/armas/escopeta.glb', length:0.92, pos:[0,-0.05,0.72]},
-  {url:'assets/armas/mp5.glb', parts:3, length:0.63, pos:[0,-0.04,0.69]},
-];
+
 function showGun(i) {
   gunMeshes.forEach((m, k) => { m.visible = k === i; });
+  const offset = gunRig.userData.gripSet ? GRIP_OFS : null;
+  const muzzleZ = modelGuns[i] ? gunAssets[i].tip : 0.98;
+  gunTip.position.set(offset?.x || 0, -0.05 + (offset?.y || 0), muzzleZ + (offset?.z || 0));
   if (modelGuns[i] || loadingGuns[i]) return;
   loadingGuns[i] = true;
   const spec = gunAssets[i], container = gunMeshes[i];
@@ -97,6 +98,7 @@ function showGun(i) {
     const fitted = fitWeapon(model, spec.length); fitted.position.set(...spec.pos);
     for (const child of container.children) child.visible = false;
     container.add(fitted); modelGuns[i] = fitted;
+    if (arms.cur === i) showGun(i); // atualiza o clarão quando o GLB substituir a reserva
   }).catch(e => console.warn('Arma GLB indisponível; usando arma simples:', e)).finally(() => { loadingGuns[i] = false; });
 }
 
@@ -121,7 +123,6 @@ const hero = { ok: false, model: null, mixer: null, act: {}, spine: null, fireW:
 const UPPER = /Spine1|Spine2|Neck|Head|Shoulder|Arm|ForeArm|Hand/;
 const FIRE_CLIP = { pistol: ['Fire_Pistol_Controlled', 'Fire_Revolver'], shotgun: ['Fire_Shotgun_Heavy_REV4', 'Fire_Shotgun'], smg: ['Fire_SMG_Burst_REV4', 'Fire_SMG'] };
 const GRIP_OFS = new THREE.Vector3(0, 0.17, -0.48); // ponto da empunhadura (no espaço do braço antigo) → origem do soquete
-const GUN_SCALE = 0.55; // as armas procedurais eram exageradas para o boneco antigo
 const RELOAD_CLIP = { pistol: ['Reload_Revolver'], shotgun: ['Reload_Shotgun'], smg: ['Reload_SMG_REV4'] };
 function lowerOnly(clip) {
   const c = clip.clone(); c.name = clip.name + '_pernas';
@@ -154,6 +155,30 @@ function heroAction(clips, names, { lower = false, swing = false, once = false }
   }
   return null;
 }
+// Guardar a pose original: o mixer pode alterar ossos antes de uma troca de personagem.
+const bindPoses = new WeakMap();
+function captureBindPose(model) {
+  if (bindPoses.has(model)) return bindPoses.get(model);
+  const poses = new Map();
+  model.traverse(o => { if (o.isBone && o.name) poses.set(o.name, o.quaternion.toArray()); });
+  bindPoses.set(model, poses); return poses;
+}
+function installJillWalk(targetModel, targetGLTF, jillGLTF) {
+  if (!hero.ok || hero.model !== targetModel || selectedHero !== 'marina') return false;
+  const base = targetGLTF.animations.find(c => c.name === 'Walking_Woman' || c.name === 'Walking');
+  const source = jillGLTF.animations.find(c => c.name === 'Walking_Woman');
+  const walk = adaptWalkClip(base, source, captureBindPose(jillGLTF.scene), captureBindPose(targetModel));
+  if (!walk) return false;
+  const oldWalk = hero.act.walk, oldUp = hero.act.walkUp;
+  const clips = [walk];
+  const newWalk = heroAction(clips, [walk.name], { lower:true });
+  const newUp = heroAction(clips, [walk.name], { swing:true });
+  if (!newWalk || !newUp) { newWalk?.stop(); newUp?.stop(); return false; }
+  if (oldWalk) oldWalk.stop(); if (oldUp) oldUp.stop();
+  newWalk.timeScale = newUp.timeScale = 0;
+  hero.act.walk = newWalk; hero.act.walkUp = newUp;
+  hero.walkSource = 'jill-retargeted'; return true;
+}
 function loadGLB(loader, url) {
   return new Promise((res, rej) => loader.load(url, res, undefined, rej));
 }
@@ -171,6 +196,7 @@ async function loadHeroInner(choice = 'marina') {
   }
   gltf = choice === 'jill' ? await loadModel('assets/personagens/jill.glb') : defaultHeroGLTF;
   const model = gltf.scene;
+  captureBindPose(model);
   if (choice === 'jill') limitTextures(model);
   model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; if (o.material) o.material.side = THREE.FrontSide; } });
   // escala para ~1,8 m e pés no chão (y=0); o modelo já vem Y-up e virado para +Z (mesma frente do jogador)
@@ -204,6 +230,12 @@ async function loadHeroInner(choice = 'marina') {
   gunRig.position.set(0, 0, 0); if (!gunRig.userData.gripSet) { for (const c of gunRig.children) c.position.add(GRIP_OFS); gunRig.userData.gripSet = true; }
   pg.add(model); body.visible = false;
   hero.model = model; hero.ok = true; selectedHero = choice;
+  hero.walkSource = choice === 'jill' ? 'jill' : 'original';
+  if (choice === 'marina') {
+    loadModel('assets/personagens/jill.glb').then(reference => {
+      captureBindPose(reference.scene); installJillWalk(model, gltf, reference);
+    }).catch(e => console.warn('Caminhada de referência indisponível; mantendo a original:', e));
+  }
   return true;
 }
 /** Promessa do carregamento do personagem: resolve true (GLB) ou false (malha antiga), nunca trava. */
@@ -218,7 +250,7 @@ export async function selectHero(choice) {
   try { if (generation !== heroGeneration) return false; return await loadHeroInner(choice); }
   catch (e) { console.warn('Personagem indisponível:', e); return false; }
 }
-export const heroInfo = () => ({ ok: hero.ok, err: hero.err, weights: { walk: hero.walkW, run: hero.runW, loco: hero.loco, blend: hero.blend, legYaw: hero.legYaw, phase: hero.ph, aim: hero.aimW, fire: hero.fireW, reload: hero.relW } });
+export const heroInfo = () => ({ ok: hero.ok, err: hero.err, walkSource: hero.walkSource, weights: { walk: hero.walkW, run: hero.runW, loco: hero.loco, blend: hero.blend, legYaw: hero.legYaw, phase: hero.ph, aim: hero.aimW, fire: hero.fireW, reload: hero.relW } });
 function heroFire() {
   if (!hero.ok) return;
   const id = curWeapon().id, a = hero.act['fire_' + id]; if (!a) return;
