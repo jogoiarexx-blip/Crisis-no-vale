@@ -11,5 +11,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --check js/director.js && node --check js/npc.js && node --check js/enemies.js
+      - name: Verificar sintaxe de todos os módulos
+        run: |
+          for f in js/*.js js/*.mjs tests/*.mjs; do node --check "$f"; done
       - run: node --test tests/*.test.mjs

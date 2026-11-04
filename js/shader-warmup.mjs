@@ -1,3 +1,23 @@
+// O desenho direto e o bloom usam variantes diferentes de cor e tone mapping.
+// compileAsync inicia a compilação sincronamente: restaura o alvo ANTES de aguardar
+// a GPU, para o loop continuar desenhando normalmente durante a preparação.
+export async function compileShaderVariants(renderer, group, camera, scene, bloomTarget = null) {
+  if (!renderer.compileAsync) return false;
+  for (const target of bloomTarget ? [null, bloomTarget] : [null]) {
+    const previous = renderer.getRenderTarget();
+    const face = renderer.getActiveCubeFace(), level = renderer.getActiveMipmapLevel();
+    let pending;
+    try {
+      renderer.setRenderTarget(target);
+      pending = renderer.compileAsync(group, camera, scene);
+    } finally {
+      renderer.setRenderTarget(previous, face, level);
+    }
+    await pending;
+  }
+  return true;
+}
+
 // Uma compilação por vez; mesma área/contexto/qualidade compartilha a promessa.
 export function createShaderWarmup(compile) {
   let epoch = 0, tail = Promise.resolve();

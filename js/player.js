@@ -191,11 +191,12 @@ async function loadHeroInner(choice = 'marina') {
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
   let gltf;
   if (!defaultHeroGLTF) {
-    try { defaultHeroGLTF = await loadGLB(loader, HERO.url); } catch (e) {
-      const r = await fetch(HERO.url + '.b64'); if (!r.ok) throw e;
+    // O repositório publica só a versão .b64 (o .glb não vai no Pages): tenta ela primeiro para não gerar um 404 a cada abertura.
+    try {
+      const r = await fetch(HERO.url + '.b64'); if (!r.ok) throw new Error('b64 indisponível: ' + r.status);
       const bin = Uint8Array.from(atob((await r.text()).replace(/\s+/g, '')), ch => ch.charCodeAt(0));
       defaultHeroGLTF = await new Promise((res, rej) => loader.parse(bin.buffer, '', res, rej));
-    }
+    } catch (e) { defaultHeroGLTF = await loadGLB(loader, HERO.url); }
   }
   gltf = choice === 'jill' ? await loadModel('assets/personagens/jill.glb') : defaultHeroGLTF;
   const model = gltf.scene;

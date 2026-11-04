@@ -214,7 +214,7 @@ js/input.js       teclado e mouse
 js/ui.js          HUD, radar, mapa das áreas, banners, telas
 js/main.js        loop principal e estados (menu, jogo, pausa, fim)
 js/utils.js       utilitários
-.github/workflows/pages.yml  publicação no GitHub Pages
+.github/workflows/coherence.yml  CI: sintaxe de todos os módulos + testes (a publicação usa o GitHub Pages da branch)
 ```
 
 ### Depuração

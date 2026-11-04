@@ -13,7 +13,8 @@ import { clearInput } from './input.js';
 import { canTriggerRevisit, scheduleRevisit, rearmPendingWarnings } from './revisit-encounters.mjs';
 import { AREAS, AREA, doorArrival, buildArea, unloadArea, isBuilt, neighbors, onAreaBuilt } from './areas.js';
 import { quality, onQuality } from './quality.js';
-import { createShaderWarmup } from './shader-warmup.mjs';
+import { createShaderWarmup, compileShaderVariants } from './shader-warmup.mjs';
+import { post } from './post.js';
 import { idle } from './idle.js';
 import { player, pg, placePlayer, snapshotBag, restoreBag, resetPlayer, animateDoorWalk } from './player.js';
 import { openTerminal } from './shop.js';
@@ -450,12 +451,12 @@ function updateTransition(dt) {
 // depois da transição e reconstruídas (em fatia ociosa) quando o jogador entra numa área vizinha a elas,
 // ou na hora, sob o fade, se ele chegar antes.
 export const streamStats = { syncBuilds: 0, bgBuilds: 0, unloads: 0, lastSyncMs: 0 };
-const shaderWarmup = createShaderWarmup(async (group) => {
-  if (!renderer.compileAsync) return false; // evita compilação síncrona extra em dispositivos antigos
-  await renderer.compileAsync(group, camera, scene);
-  return true;
+const shaderWarmup = createShaderWarmup(group =>
+  compileShaderVariants(renderer, group, camera, scene, post.composer?.renderTarget1));
+onQuality(() => {
+  shaderWarmup.invalidate();
+  if (G.state !== 'loading') streamAround(D.area);
 });
-onQuality(() => shaderWarmup.invalidate());
 export function warmArea(a, shaders = true) {
   if (isBuilt(a)) { if (shaders && G.state !== 'loading') shaderWarmup.request(a); return; }
   idle(() => {
@@ -467,7 +468,7 @@ export function streamAround(a) {
   if (!a) return;
   const keep = new Set([a, ...neighbors(a)]);
   for (const n of keep) warmArea(n);
-  if (!quality.p.stream) { AREAS.forEach((x) => warmArea(x, false)); return; }
+  if (!quality.p.stream) { AREAS.forEach((x) => warmArea(x)); return; }
   for (const x of AREAS) if (!keep.has(x) && isBuilt(x) && !shaderWarmup.isBusy(x)) { unloadArea(x); streamStats.unloads++; }
 }
 // reconstruiu: reaplica estado da campanha que mora nos objetos 3D

@@ -19,6 +19,7 @@ share(GLOW, ...contactShadowResources);
 
 // ---------- renderer / cena / câmera ----------
 export const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.info.autoReset = false; // o bloom faz várias passagens por quadro; main.js zera a contagem 1x por quadro (renderInfo fica correto)
 const pixelRatio = () => Math.min(window.devicePixelRatio || 1, quality.p.pixelRatio);
 renderer.setPixelRatio(pixelRatio());
 renderer.setSize(innerWidth, innerHeight);

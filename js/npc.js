@@ -52,7 +52,7 @@ let limaModel = null, limaMixer = null, limaWalk = null, limaLoading = false;
 function ensureLimaModel() {
   if (limaModel || limaLoading) return;
   limaLoading = true;
-  loadModel('assets/personagens/dra-lima.glb').then(gltf => {
+  loadModel('assets/personagens/dra-lima-lod.glb').then(gltf => {
     const model = gltf.scene;
     limitTextures(model); model.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(model), height = box.max.y - box.min.y;

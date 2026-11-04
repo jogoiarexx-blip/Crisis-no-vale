@@ -20,6 +20,7 @@ import { D, startCampaign, updateDirector, updateHeli, hudData, interact, skipPa
 import { readSave } from './state.js';
 import { quality, setQualityMode, autoQualityTick, applyQualityNow, onQuality, MODE_LABEL, PRESETS } from './quality.js';
 import { nextFrame, idleBusy } from './idle.js';
+import { compileShaderVariants } from './shader-warmup.mjs';
 import { updateLod, lodStats, forceLod } from './lod.js';
 import * as story from './story.js';
 import { initPost, render, toggleBloom, post } from './post.js';
@@ -231,6 +232,7 @@ function loop() {
     camera, player, weapon: curWeapon(), weapons, cur: arms.cur, reloading: arms.reloading, reloadTotal: arms.reloadTotal, moving: player.moving,
     enemies, pickups, boxes, lightning: atmo.lightning, haze: atmo.haze, bag, medMax: medMax(), grenadeMax: grenadeMax(), ...h,
   });
+  renderer.info.reset();
   render(renderer, scene, camera, dt);
 }
 
@@ -240,7 +242,6 @@ ui.bindQuality((mode) => {
   setQualityMode(mode); refreshQualityUI();
   document.querySelectorAll('.qsel.first').forEach((q) => { q.classList.remove('first'); q.querySelector('span').textContent = 'QUALIDADE GRÁFICA'; });
   ui.feed(ui.STR.quality(MODE_LABEL[mode] + (mode === 'auto' ? ' → ' + quality.p.label : '')), '#cde');
-  if (!quality.p.stream && D.area) AREAS.forEach((a) => warmArea(a, false)); // Alto: mantém todas as áreas prontas
 });
 // a predefinição Auto pode baixar sozinha — mantém os botões em dia
 onQuality(() => refreshQualityUI());
@@ -252,7 +253,7 @@ async function compileShaders(extra) {
   const tmp = [];
   for (const o of extra) if (!o.parent) { scene.add(o); tmp.push({ o, v: o.visible }); o.visible = true; o.position.y = -40; }
   try {
-    if (renderer.compileAsync) await renderer.compileAsync(scene, camera);
+    if (renderer.compileAsync) await compileShaderVariants(renderer, scene, camera, scene, post.composer?.renderTarget1);
     else renderer.compile(scene, camera);
   } catch (e) { console.warn('pré-compilação de shaders falhou (segue sem):', e && e.message); }
   for (const { o, v } of tmp) { scene.remove(o); o.visible = v; o.position.y = 0; }
@@ -274,6 +275,7 @@ async function boot() {
   // tela de menu: mostra o cais ao fundo
   startCampaign(false); clearEnemies(); hideSurvivor();
   await step('Carregando… preparando shaders');
+  await initPost(renderer, scene, camera);
   await compileShaders(warm);
   ui.setLoading(1, 'Pronto!');
   G.state = 'menu';
@@ -281,7 +283,6 @@ async function boot() {
   ui.showScreen('menu'); refreshCharacterButtons();
   try { if (isJillUnlocked() && localStorage.getItem('crise-no-vale-personagem') === 'jill') chooseCharacter('jill'); } catch (e) {}
   post.onAuto = () => ui.feed(ui.STR.bloomAuto, '#cde');
-  initPost(renderer, scene, camera);
   loop();
   ui.hideLoading();
   streamAround(D.area); // inicia shaders dos vizinhos após compilar a área inicial
