@@ -88,7 +88,8 @@ function showGun(i) {
   gunMeshes.forEach((m, k) => { m.visible = k === i; });
   const offset = gunRig.userData.gripSet ? GRIP_OFS : null;
   const muzzleZ = modelGuns[i] ? gunAssets[i].tip : 0.98;
-  gunTip.position.set(offset?.x || 0, -0.05 + (offset?.y || 0), muzzleZ + (offset?.z || 0));
+  const muzzleY = modelGuns[i] ? (gunAssets[i].tipY ?? -0.05) : -0.05;
+  gunTip.position.set(offset?.x || 0, muzzleY + (offset?.y || 0), muzzleZ + (offset?.z || 0));
   if (modelGuns[i] || loadingGuns[i]) return;
   loadingGuns[i] = true;
   const spec = gunAssets[i], container = gunMeshes[i];
@@ -203,8 +204,13 @@ async function loadHeroInner(choice = 'marina') {
   model.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(model), h = Math.max(0.01, box.max.y - box.min.y), k = HERO.height / h;
   model.scale.setScalar(k); model.position.y = -box.min.y * k;
-  const socket = model.getObjectByName('WeaponSocket_R') || model.getObjectByName('mixamorig:RightHand') || model.getObjectByName('mixamorigRightHand');
-  if (!socket) throw new Error('osso da mão direita não encontrado');
+  let socket = model.getObjectByName('WeaponSocket_R');
+  if (!socket) {
+    const hand = model.getObjectByName('mixamorig:RightHand') || model.getObjectByName('mixamorigRightHand');
+    if (!hand) throw new Error('osso da mão direita não encontrado');
+    socket = new THREE.Group(); socket.name = 'WeaponSocket_R';
+    socket.position.set(0, 0.075, 0.005); hand.add(socket);
+  }
   const bone = (n) => model.getObjectByName('mixamorig:' + n) || model.getObjectByName('mixamorig' + n);
   hero.spine = bone('Spine2'); hero.hips = bone('Hips'); hero.spine0 = bone('Spine'); hero.armR = bone('RightArm'); hero.handR = bone('RightHand'); hero.socket = socket;
   if (hero.model) { hero.mixer.stopAllAction(); hero.model.removeFromParent(); }

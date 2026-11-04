@@ -5,6 +5,7 @@ import { FX, CAMERA } from './config.js';
 import { rand, clamp, noiseTex, glowTex, texMat, corrugatedTex, rippleTex, beamTex, labelTex, mergeGeos, softSplatTex, mulberry32 } from './utils.js';
 import { G } from './state.js';
 import { quality, onQuality } from './quality.js';
+import { makeGrassBlades, grassCount } from './grass-design.mjs';
 
 export const GLOW = glowTex();
 
@@ -348,14 +349,19 @@ export function ground(ctx, b, tex, extra = 30, opts = {}) {
   if (opts.puddles) scatter(opts.puddles, puddleMat, 0.02, 1.2, 3.4);
 }
 export function grass(ctx, b, n, color = 0x2f5524) {
-  const rng = ctx.rng, geo = new THREE.ConeGeometry(0.12, 0.6, 4); geo.translate(0, 0.3, 0);
-  const inst = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 }), n), d = new THREE.Object3D();
+  const rng = ctx.rng, blades = makeGrassBlades(), geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(blades.positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(blades.colors, 3));
+  geo.computeVertexNormals();
+  const inst = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, vertexColors: true, side: THREE.DoubleSide }), n), d = new THREE.Object3D();
   const base = new THREE.Color(color), c = new THREE.Color();
   for (let i = 0; i < n; i++) {
     d.position.set(b.minX - 4 + rng() * (b.maxX - b.minX + 8), 0, b.minZ - 4 + rng() * (b.maxZ - b.minZ + 8));
-    d.rotation.set(rng() * 0.4, rng() * 3, rng() * 0.4); d.scale.set(0.6 + rng(), 0.5 + rng() * 1.3, 0.6 + rng()); d.updateMatrix(); inst.setMatrixAt(i, d.matrix);
+    d.rotation.set(rng() * 0.16, rng() * 3, rng() * 0.16); d.scale.set(0.6 + rng(), 0.5 + rng() * 1.3, 0.6 + rng()); d.updateMatrix(); inst.setMatrixAt(i, d.matrix);
     c.copy(base).multiplyScalar(0.7 + rng() * 0.6); inst.setColorAt(i, c);
   }
+  // O limite usa todas as instâncias, permitindo aumentar a qualidade depois sem cortar a grama.
+  inst.computeBoundingSphere(); inst.userData.grassMax = n; inst.count = grassCount(n, quality.p.grass ?? 1);
   ctx.group.add(inst);
 }
 /** Anel de árvores fora dos limites (selva fechada ao redor). */
@@ -681,6 +687,7 @@ export function applyQuality(p = quality.p) {
   const ffPer = Math.floor(Math.min(FF, p.fireflies) / 2);
   ffSets.forEach((f) => { f.n = Math.min(f.max, ffPer); f.geo.setDrawRange(0, f.n); });
   applyShadowTiers(scene);
+  scene.traverse(o => { if (o.isInstancedMesh && Number.isFinite(o.userData.grassMax)) o.count = grassCount(o.userData.grassMax, p.grass ?? 1); });
   if (recompile) { scene.traverse((o) => { const m = o.material; if (m) (Array.isArray(m) ? m : [m]).forEach((x) => { x.needsUpdate = true; }); }); for (const fn of extraMats) fn(); }
   assignLamps(true);
   return recompile;
