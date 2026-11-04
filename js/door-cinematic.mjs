@@ -15,3 +15,6 @@ export function doorPose(t, ready) {
 export function doorVectors(side) {
   return ({ N:{x:0,z:-1,yaw:Math.PI}, S:{x:0,z:1,yaw:0}, W:{x:-1,z:0,yaw:-Math.PI/2}, E:{x:1,z:0,yaw:Math.PI/2} })[side] || null;
 }
+
+// A folha só ocupa a visão fora da cena quando existe bloqueio narrativo.
+export const gateVisible = (locked, transitioning = false) => !!locked || !!transitioning;

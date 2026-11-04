@@ -8,7 +8,7 @@ import { G, writeSave, readSave, addEp } from './state.js';
 import { normalizeStreak, finishStreak } from './clean-streak.mjs';
 import { safeDoorArrival } from './door-safety.mjs';
 import { passageFor, advancePassage } from './passage-scenes.mjs';
-import { doorPose, doorVectors, DOOR_TIMING } from './door-cinematic.mjs';
+import { doorPose, doorVectors, DOOR_TIMING, gateVisible } from './door-cinematic.mjs';
 import { clearInput } from './input.js';
 import { canTriggerRevisit, scheduleRevisit, rearmPendingWarnings } from './revisit-encounters.mjs';
 import { AREAS, AREA, doorArrival, buildArea, unloadArea, isBuilt, neighbors, onAreaBuilt } from './areas.js';
@@ -166,7 +166,8 @@ function syncGates(a, instant) {
     const ref = a.refs.doors[d.id]; if (!ref) continue;
     const open = !isLocked(a.id, d.id);
     ref.open = open;
-    if (instant) ref.gate.position.y = 0; // destrancada permanece fechada até interação
+    if (instant) ref.gate.position.y = 0;
+    ref.gate.visible = gateVisible(!open); // folha aparece quando bloqueada ou durante a cena
     setDoorLight(ref, open);
   }
 }
@@ -370,6 +371,7 @@ function startTransition(door) {
     scene: passageFor(D.area.id, destination.id, D.st[destination.id].visited, story.S.said),
     sceneActive: false, sceneTime: 0, switched: false, preparing: false, closingSound: false,
   };
+  ref.gate.visible = gateVisible(false, true);
   G.transitioning = true; clearInput(); story.clearSpeech(); pg.visible = true;
   player.inv = Math.max(player.inv, WORLD.FADE * 2 + 0.6);
   sfx.doorOpen();
@@ -391,7 +393,7 @@ function prepareTransition(T) {
 }
 function cancelTransition(T) {
   console.error('Não foi possível preparar a passagem:', T.error);
-  T.ref.gate.position.y = 0; pg.position.set(T.from.x, 0, T.from.z); pg.rotation.y = T.from.yaw;
+  T.ref.gate.position.y = 0; T.ref.gate.visible = gateVisible(false); pg.position.set(T.from.x, 0, T.from.z); pg.rotation.y = T.from.yaw;
   G.yaw = T.from.yaw; player.moving = false; player.spd = 0;
   clearInput(); D.trans = null; G.transitioning = false; ui.setFade(0);
   ui.feed('Não foi possível abrir a passagem. Tente novamente.', '#ff8a70');
@@ -856,6 +858,7 @@ export function updateDirector(dt) {
     const ref = a.refs.doors[d.id], open = !isLocked(a.id, d.id);
     if (ref.open !== open) { ref.open = open; setDoorLight(ref, open); if (open) sfx.door(); }
     ref.gate.position.y = damp(ref.gate.position.y, 0, 3, dt);
+    ref.gate.visible = gateVisible(!open);
   }
   // escolta: chegou ao terminal de controle
   if (a.id === 'patio' && F.escort && !F.heliCode && !D.event && survivor.following) {

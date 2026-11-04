@@ -317,7 +317,7 @@ export function tree(ctx, x, z, collide, sc, palm = false) {
   const rng = ctx.rng, style = palm ? 'palm' : (ctx.treeStyle || (rng() < 0.3 ? 'conifer' : 'broad'));
   const vs = treeVariants(style), m = new THREE.Mesh(vs[Math.floor(rng() * vs.length)], TREE_MAT);
   m.scale.set(sc, sc * (0.9 + rng() * 0.25), sc); m.rotation.y = rng() * 6.28; m.position.set(x, 0, z);
-  tier(m, collide ? 'near' : 'far'); lod(m, 'big'); ctx.group.add(m);
+  tier(m, collide ? 'near' : 'far'); lod(m, 'big'); m.userData.backgroundTree = !collide; ctx.group.add(m);
   queueShadow(ctx, x, z, sc * 2.4, sc * 2.4);
   if (collide) ctx.circles.push({ x, z, r: 0.45 * sc, h: 6 });
 }

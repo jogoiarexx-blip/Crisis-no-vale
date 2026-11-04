@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
-import {doorPose, doorVectors, DOOR_TIMING} from '../js/door-cinematic.mjs';
+import {doorPose, doorVectors, DOOR_TIMING, gateVisible} from '../js/door-cinematic.mjs';
 import {GUN_ASSETS} from '../js/gun-layout.mjs';
 
 test('porta abre, personagem atravessa, porta fecha e só troca quando destino estiver pronto',()=>{
+  assert.equal(gateVisible(false),false);assert.equal(gateVisible(true),true);assert.equal(gateVisible(false,true),true);
   assert.deepEqual(doorPose(0,false),{gate:0,travel:0,moving:false,fade:0,switchArea:false});
   assert.equal(doorPose(DOOR_TIMING.open,false).gate,1);
   const middle=doorPose(1.7,false);assert.ok(middle.moving && middle.travel>0 && middle.travel<1);
@@ -25,7 +26,7 @@ function harness({fail=false}={}) {
   const dest={id:'ruinas'},door={id:'N',side:'N',to:'ruinas',toDoor:'S'};
   const pg={position:{x:0,z:-16,set(x,y,z){Object.assign(this,{x,y,z})}},rotation:{y:0},visible:true};
   const D={area:{id:'porto',refs:{doors:{N:ref}}},st:{ruinas:{visited:false}},trans:null};
-  const c={D,AREA:{ruinas:dest},player:{r:.5,inv:0},pg,G:{state:'play',yaw:0,transitioning:false,cleanStreak:{}},WORLD:{FADE:.4,DOOR_DEPTH:1.6},doorPose,doorVectors,DOOR_TIMING,
+  const c={D,AREA:{ruinas:dest},player:{r:.5,inv:0},pg,G:{state:'play',yaw:0,transitioning:false,cleanStreak:{}},WORLD:{FADE:.4,DOOR_DEPTH:1.6},doorPose,doorVectors,DOOR_TIMING,gateVisible,
     story:{S:{said:new Set()},clearSpeech(){}},passageFor:()=>null,advancePassage:()=>{},clearInput(){},
     sfx:{doorOpen(){},doorClose(){}}, ui:{setFade(){},feed(t){feed.push(t)},hidePassage(){},showPassage(){}},
     requestAnimationFrame(fn){callbacks.push(fn)},setTimeout(fn){fn()},isBuilt(){return prepared},buildArea(){prepared=true;return 1},streamStats:{syncBuilds:0},
@@ -35,7 +36,7 @@ function harness({fail=false}={}) {
   return {c,D,ref,door,runJobs(){for(const f of callbacks.splice(0))f()},get enters(){return enters},get bonuses(){return bonuses},feed};
 }
 test('diretor prepara após começar, troca e paga sequência uma única vez',()=>{
-  const h=harness();h.c.startTransition(h.door);assert.ok(h.D.trans);assert.equal(h.enters,0);
+  const h=harness();h.c.startTransition(h.door);assert.ok(h.D.trans);assert.equal(h.ref.gate.visible,true);assert.equal(h.enters,0);
   h.c.updateTransition(.2);assert.ok(h.ref.gate.position.y>0);assert.equal(h.D.trans.ready,false);
   h.runJobs();assert.equal(h.D.trans.ready,true);
   for(let i=0;i<100&&h.D.trans;i++)h.c.updateTransition(.05);
@@ -43,7 +44,7 @@ test('diretor prepara após começar, troca e paga sequência uma única vez',()
 });
 test('destino inacessível cancela, fecha portão e restaura personagem',()=>{
   const h=harness({fail:true});h.c.startTransition(h.door);h.c.updateTransition(.2);h.runJobs();h.c.updateTransition(.05);
-  assert.equal(h.D.trans,null);assert.equal(h.ref.gate.position.y,0);assert.equal(h.c.pg.position.z,-16);assert.equal(h.enters,0);assert.ok(h.feed.length);
+  assert.equal(h.D.trans,null);assert.equal(h.ref.gate.position.y,0);assert.equal(h.ref.gate.visible,false);assert.equal(h.c.pg.position.z,-16);assert.equal(h.enters,0);assert.ok(h.feed.length);
 });
 test('Glock usa cano negativo X e empunhadura próxima do soquete',()=>{
   const s=GUN_ASSETS[0], centerX=(-.950776994+.948599994)/2,centerY=(-.72637397+.724687994)/2,scale=s.length/(.948599994+.950776994);

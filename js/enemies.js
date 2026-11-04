@@ -295,7 +295,7 @@ function updateEnemy(e, dt) {
     g.position.set(e.pos.x, k * 0.25 * T.scale - (d > 1.8 ? (d - 1.8) * 0.7 : 0), e.pos.z);
     e.mats.forEach((m) => m.emissive && m.emissive.setHex(0));
     e.eyeGlow.forEach((s) => { s.material.opacity = Math.max(0, 0.8 - d); });
-    if (!e.dusted && d > 0.32) { e.dusted = true; burst(e.pos.x, 0.15, e.pos.z, 'dust', T.shape === 'brute' ? 14 : 6, 2); }
+    if (!e.dusted && d > 0.32) { e.dusted = true; burst(e.pos.x, 0.15, e.pos.z, 'dust', T.shape === 'brute' ? 5 : 3, 1.4); }
     if (d > 3.5) { disposeEnemy(e); e.remove = true; }
     return;
   }

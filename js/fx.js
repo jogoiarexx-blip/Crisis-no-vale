@@ -181,15 +181,13 @@ export function explosion(x, z, r) {
 
 /** v6: floreio de crítico/abate — faíscas e um anel rápido no ponto do golpe (leve no Baixo). */
 export function flourish(x, y, z, kill) {
-  burst(x, y, z, 'spark', kill ? 10 : 6, kill ? 5 : 3.5);
-  if (!fxRich()) return;
-  if (kill) { shockwave(x, z, 1.8, 0xff5040); flashAt(x, y, z, 0xff6040, 30); }
-  else flashAt(x, y, z, 0xffd060, 18);
+  if (kill) return; // abate já tem sangue e animação; evita faíscas e anel duplicados
+  burst(x, y, z, 'spark', 3, 3.5);
+  if (fxRich()) flashAt(x, y, z, 0xffd060, 18);
 }
 /** v6: jorro de sangue de abate — mais forte, com um spray para cima no Médio/Alto. */
 export function bloodBurst(x, y, z, heavy, dx = 0, dz = 0) {
-  burst(x, y, z, 'blood', heavy ? 34 : 20, heavy ? 5 : 4.5, dx, dz);
-  if (fxRich()) { burst(x, y + 0.3, z, 'blood', heavy ? 16 : 10, 6.5, dx * 0.4, dz * 0.4); decal(x + dx * 1.2, z + dz * 1.2, heavy ? 1.6 : 1.1); }
+  burst(x, y, z, 'blood', heavy ? 10 : 6, heavy ? 3.5 : 3, dx, dz); // uma mancha já é criada pelo combate
 }
 
 export function updateFx(dt) {
