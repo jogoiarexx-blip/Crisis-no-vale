@@ -1,3 +1,4 @@
+import { actorShadow } from './contact-shadows.js';
 // player.js — personagem (modelo GLB da Marina, com malha low-poly de reserva), movimento, vida, armas e câmera em terceira pessoa.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -23,6 +24,7 @@ export const events = { onDeath: null };
 // ---------- malha ----------
 // pg = raiz do personagem (segue player.pos / yaw). body = malha procedural antiga (reserva se o GLB falhar).
 export const pg = new THREE.Group(); scene.add(pg);
+const playerShadow = actorShadow(pg, 1.25, 1.05);
 const body = new THREE.Group(); pg.add(body);
 const suit = new THREE.MeshStandardMaterial({ color: 0x4b5a3a, roughness: 0.8 });
 const vest = new THREE.MeshStandardMaterial({ color: 0x2a2f2a, roughness: 0.7 });
@@ -511,7 +513,7 @@ export function restoreBag(s) {
 
 export function resetPlayer() {
   Object.assign(player, { hp: PLAYER.HP, inv: 0, kx: 0, kz: 0, dead: false, phase: 0, moving: false });
-  player.pos.set(0, 0, 0); pg.rotation.set(0, 0, 0); pg.position.set(0, 0, 0); pg.visible = true;
+  player.pos.set(0, 0, 0); pg.rotation.set(0, 0, 0); pg.position.set(0, 0, 0); pg.visible = true; playerShadow.visible = true;
   bag.owned = [true, false, false]; bag.grenades = GRENADE.START; bag.meds = INVENTORY.MED_START; bag.armor = 0; bag.up = {};
   applyUpgrades(); // v10: volta aos atributos base
   weapons.forEach((w) => { w.mag = w.size; w.res = w.startRes; });
@@ -524,7 +526,7 @@ export function resetPlayer() {
 let heartT = 0;
 export function updatePlayer(dt) {
   updateWeapons(dt);
-  if (player.dead) { player.vx = player.vz = 0; pg.rotation.x = Math.max(pg.rotation.x - dt * 3, -Math.PI / 2); pg.position.y = 0.2 * Math.min(1, -pg.rotation.x); pg.visible = true; return; }
+  if (player.dead) { playerShadow.visible = false; player.vx = player.vz = 0; pg.rotation.x = Math.max(pg.rotation.x - dt * 3, -Math.PI / 2); pg.position.y = 0.2 * Math.min(1, -pg.rotation.x); pg.visible = true; return; }
   if (keys.ArrowLeft) G.yaw += dt * 2.4; if (keys.ArrowRight) G.yaw -= dt * 2.4;
   let ix = 0, iz = 0;
   if (keys.KeyW || keys.ArrowUp) iz += 1; if (keys.KeyS || keys.ArrowDown) iz -= 1; if (keys.KeyD) ix += 1; if (keys.KeyA) ix -= 1;

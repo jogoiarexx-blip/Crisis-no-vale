@@ -6,6 +6,7 @@ import { rand, clamp, noiseTex, glowTex, texMat, corrugatedTex, rippleTex, beamT
 import { G } from './state.js';
 import { quality, onQuality } from './quality.js';
 import { makeGrassBlades, grassCount } from './grass-design.mjs';
+import { queueShadow, contactShadowResources } from './contact-shadows.js';
 
 export const GLOW = glowTex();
 
@@ -14,14 +15,14 @@ const SHARED = new WeakSet();
 /** Marca geometria/material/textura como compartilhado (não é descartado com a área). */
 export function share(...xs) { for (const x of xs) if (x) SHARED.add(x); return xs[0]; }
 const isShared = (x) => SHARED.has(x);
-share(GLOW);
+share(GLOW, ...contactShadowResources);
 
 // ---------- renderer / cena / câmera ----------
 export const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 const pixelRatio = () => Math.min(window.devicePixelRatio || 1, quality.p.pixelRatio);
 renderer.setPixelRatio(pixelRatio());
 renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = false; // sombras de contato WebP substituem o shadow map
 renderer.shadowMap.type = quality.p.softShadows ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -44,7 +45,7 @@ addEventListener('resize', () => {
 const hemi = new THREE.HemisphereLight(0x7a9a8a, 0x0a0f08, 1.25);
 scene.add(hemi);
 const moon = new THREE.DirectionalLight(0xa8bce0, 1.2);
-moon.position.set(-20, 40, -12); moon.castShadow = true;
+moon.position.set(-20, 40, -12); moon.castShadow = false;
 moon.shadow.mapSize.set(quality.p.shadowSize, quality.p.shadowSize);
 Object.assign(moon.shadow.camera, { left: -38, right: 38, top: 38, bottom: -38, near: 1, far: 110 });
 moon.shadow.bias = -0.0008;
@@ -185,6 +186,7 @@ export function makeCtx(rng) { const group = new THREE.Group(); group.visible = 
 /** Paralelepípedo sólido (colide e bloqueia tiros se h alto). */
 export function solid(ctx, x, z, w, d, h, mat = MATS.concrete, y = 0, collide = true) {
   const m = boxMesh(mat, w, h, d); m.position.set(x, y + h / 2, z); m.castShadow = m.receiveShadow = true; ctx.group.add(m);
+  if (y === 0 && w <= 12 && d <= 12) queueShadow(ctx, x, z, w + 0.8, d + 0.8);
   if (collide) ctx.boxes.push({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, h: y + h });
   return m;
 }
@@ -218,6 +220,7 @@ export function crate(ctx, x, z, s, mat = MATS.crate) {
   if (mat !== MATS.crate) return solid(ctx, x, z, s, s, s, mat);
   const m = new THREE.Mesh(crateGeo(), crateMat); m.scale.setScalar(s); m.position.set(x, 0, z);
   m.castShadow = m.receiveShadow = true; ctx.group.add(m);
+  queueShadow(ctx, x, z, s + 0.7, s + 0.7);
   ctx.boxes.push({ minX: x - s / 2, maxX: x + s / 2, minZ: z - s / 2, maxZ: z + s / 2, h: s });
   return m;
 }
@@ -315,13 +318,14 @@ export function tree(ctx, x, z, collide, sc, palm = false) {
   const vs = treeVariants(style), m = new THREE.Mesh(vs[Math.floor(rng() * vs.length)], TREE_MAT);
   m.scale.set(sc, sc * (0.9 + rng() * 0.25), sc); m.rotation.y = rng() * 6.28; m.position.set(x, 0, z);
   tier(m, collide ? 'near' : 'far'); lod(m, 'big'); ctx.group.add(m);
+  queueShadow(ctx, x, z, sc * 2.4, sc * 2.4);
   if (collide) ctx.circles.push({ x, z, r: 0.45 * sc, h: 6 });
 }
 const rockGeo = share(new THREE.DodecahedronGeometry(1, 0));
 export function rock(ctx, x, z, s, collide = true) {
   const rng = ctx.rng, m = new THREE.Mesh(rockGeo, MATS.rock); m.scale.set(s, s * 0.7, s);
   m.position.set(x, s * 0.45, z); m.rotation.set(rng() * 3, rng() * 3, rng() * 3);
-  m.receiveShadow = true; tier(m, collide ? 'near' : s < 0.8 ? 'small' : 'far'); lod(m, s < 0.8 ? 'small' : 'big'); ctx.group.add(m); if (collide) ctx.circles.push({ x, z, r: s * 0.9, h: s * 1.1 });
+  m.receiveShadow = true; tier(m, collide ? 'near' : s < 0.8 ? 'small' : 'far'); lod(m, s < 0.8 ? 'small' : 'big'); ctx.group.add(m); queueShadow(ctx, x, z, s * 2.4, s * 2.4); if (collide) ctx.circles.push({ x, z, r: s * 0.9, h: s * 1.1 });
 }
 const FLAT = share(new THREE.PlaneGeometry(1, 1));
 const puddleMat = share(new THREE.MeshStandardMaterial({ color: 0x05080a, roughness: 0.03, metalness: 0.35, transparent: true, opacity: 0.85, alphaMap: SPLAT, depthWrite: false, bumpMap: rip(1, 1), bumpScale: 0.5, polygonOffset: true, polygonOffsetFactor: -2 }));

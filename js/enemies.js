@@ -1,3 +1,4 @@
+import { actorShadow } from './contact-shadows.js';
 // enemies.js — construção dos dinossauros (silhuetas distintas), IA (patrulha → alerta → ataque),
 // chefe Colosso, spawn por posição/borda da área e cuspe ácido.
 import * as THREE from 'three';
@@ -134,12 +135,13 @@ function buildDino(type) {
   bg.renderOrder = fg.renderOrder = 10;
   bar.position.y = 2.6 * T.scale; scene.add(bar);
 
+  const contactShadow = actorShadow(g, big ? 2.4 : 1.6, big ? 3 : 2.6);
   g.scale.setScalar(T.scale);
   const em0 = mats.map((m) => (m.emissive ? m.emissive.getHex() : 0));
   // v9: listas do LOD — meshes que projetam sombra e detalhes finos (dentes/garras) que somem de longe
   const shadowMeshes = [], fine = [];
   g.traverse((o) => { if (!o.isMesh) return; if (o.castShadow) shadowMeshes.push(o); if (o.material === toothM) fine.push(o); });
-  return { type, g, body, head, jaw, tail, tail2, legs, frill, mats, em0, eyeM, eyeGlow, bar, barFg: fg, shadowMeshes, fine };
+  return { type, g, body, head, jaw, tail, tail2, legs, frill, mats, em0, eyeM, eyeGlow, bar, barFg: fg, shadowMeshes, fine, contactShadow };
 }
 
 // ---------- pool de inimigos (raptor / cuspidor / bruto). O Colosso é único e não entra no pool ----------
@@ -147,7 +149,7 @@ function buildDino(type) {
 const POOL = {}, POOL_MAX = 8;
 export const poolStats = { built: 0, reused: 0 };
 function resetParts(P) {
-  P.g.rotation.set(0, 0, 0); P.g.position.set(0, 0, 0); P.g.visible = true; P.g.scale.setScalar(ENEMY_TYPES[P.type].scale);
+  P.contactShadow.visible = true; P.g.rotation.set(0, 0, 0); P.g.position.set(0, 0, 0); P.g.visible = true; P.g.scale.setScalar(ENEMY_TYPES[P.type].scale);
   P.body.position.set(0, 0, 0); P.body.rotation.set(0, 0, 0);
   P.legs.forEach((l) => l.rotation.set(0, 0, 0)); P.jaw.rotation.set(0, 0, 0);
   P.tail.rotation.set(0, 0, 0); P.tail2.rotation.set(0, 0, 0);
@@ -280,6 +282,7 @@ function updateSpits(dt) {
 function updateEnemy(e, dt) {
   const g = e.g, T = e.cfg, t = G.time;
   if (e.dead) {
+    e.contactShadow.visible = false;
     if (e.lane) { hideLane(e.lane); e.lane = null; }
     e.deadT += dt; e.bar.visible = false;
     // v6: desabamento — tranco (achata), tomba com pequeno quique, desliza com o impulso, afunda e encolhe até sumir

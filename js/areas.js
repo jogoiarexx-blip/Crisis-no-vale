@@ -1,3 +1,4 @@
+import { buildContactShadows } from './contact-shadows.js';
 // areas.js — definição das ÁREAS conectadas (geometria, clima, portas, itens, inimigos e eventos).
 // Cada área é um grupo próprio na cena; só a área atual fica visível e com colisores ativos.
 // Coordenadas locais centradas na origem. Norte = -Z, Leste = +X.
@@ -608,6 +609,7 @@ export function buildArea(a) {
   a.refs.logs = (a.logs || []).map((l) => ({ ...l, ...W.datapad(a.ctx, l.x, l.z, l.yaw || 0) }));
   // placas com o destino em cada portão
   a.doors.forEach((d) => { const ref = a.refs.doors[d.id]; if (ref) W.doorSign(ref, '→ ' + AREA[d.to].name, DIR[d.side]); });
+  buildContactShadows(a.ctx);
   W.applyShadowTiers(a.ctx.group);
   collectLod(a.ctx);   // v9: LOD por distância (js/lod.js)
   a.builds = (a.builds || 0) + 1;

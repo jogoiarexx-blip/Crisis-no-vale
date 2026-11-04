@@ -1,3 +1,4 @@
+import { actorShadow } from './contact-shadows.js';
 // npc.js — a sobrevivente (Dra. Lima): espera na cabine, segue o jogador e é derrubada (não morre) por mordidas.
 import * as THREE from 'three';
 import { scene, resolve, boxes, circles, bounds, GLOW } from './world.js';
@@ -18,6 +19,7 @@ export const survivor = {
 
 // ---------- malha (jaleco branco, cabelo preto, rádio) ----------
 const g = new THREE.Group(); g.visible = false; scene.add(g);
+actorShadow(g, 1.1, 0.95);
 const coat = new THREE.MeshStandardMaterial({ color: 0xd8d8d0, roughness: 0.8 });
 const pants = new THREE.MeshStandardMaterial({ color: 0x2a3040, roughness: 0.9 });
 const skin = new THREE.MeshStandardMaterial({ color: 0x8a5a3a, roughness: 0.8 });
