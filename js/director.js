@@ -1,6 +1,6 @@
 // director.js — progressão por ÁREAS (no lugar das ondas): portas e travas, estado de cada área,
 // encontros roteirizados, gerador, escolta, chefe, resgate, objetivos e terminais de save.
-import { activateArea, bounds, boxes, castWorld, setDoorLight, setPower, atmo, spots, bossGlow, flashAt } from './world.js';
+import { activateArea, bounds, boxes, castWorld, setDoorLight, setPower, atmo, spots, bossGlow, flashAt, renderer, camera, scene } from './world.js';
 import { WORLD, SCORE, PLAYER, EP, ENEMY_TYPES } from './config.js';
 import { captureEncounterMemory, restoreEncounterMemory } from './encounter-memory.mjs';
 import { canAccessRecord, canSeeRecord } from './archive-model.mjs';
@@ -12,7 +12,8 @@ import { doorPose, doorVectors, DOOR_TIMING, gateVisible } from './door-cinemati
 import { clearInput } from './input.js';
 import { canTriggerRevisit, scheduleRevisit, rearmPendingWarnings } from './revisit-encounters.mjs';
 import { AREAS, AREA, doorArrival, buildArea, unloadArea, isBuilt, neighbors, onAreaBuilt } from './areas.js';
-import { quality } from './quality.js';
+import { quality, onQuality } from './quality.js';
+import { createShaderWarmup } from './shader-warmup.mjs';
 import { idle } from './idle.js';
 import { player, pg, placePlayer, snapshotBag, restoreBag, resetPlayer, animateDoorWalk } from './player.js';
 import { openTerminal } from './shop.js';
@@ -387,7 +388,11 @@ function prepareTransition(T) {
       if (!isBuilt(T.destination)) { const ms = buildArea(T.destination); streamStats.syncBuilds++; streamStats.lastSyncMs = Math.round(ms); }
       T.arrival = safeDoorArrival(T.destination, T.door.toDoor, player.r, WORLD.DOOR_DEPTH);
       if (!T.arrival) throw new Error('Nenhum ponto livre próximo à porta de destino');
-      T.ready = true;
+      // Mesmo se a GPU não concluir em tempo hábil, a porta nunca fica presa.
+      let settled = false;
+      const finish = () => { if (!settled) { settled = true; if (D.trans === T) T.ready = true; } };
+      setTimeout(finish, 2500);
+      shaderWarmup.request(T.destination).then(finish, finish);
     } catch (error) { T.error = error; }
   }, 0));
 }
@@ -445,16 +450,25 @@ function updateTransition(dt) {
 // depois da transição e reconstruídas (em fatia ociosa) quando o jogador entra numa área vizinha a elas,
 // ou na hora, sob o fade, se ele chegar antes.
 export const streamStats = { syncBuilds: 0, bgBuilds: 0, unloads: 0, lastSyncMs: 0 };
-export function warmArea(a) {
-  if (isBuilt(a)) return;
-  idle(() => { if (!isBuilt(a)) { buildArea(a); streamStats.bgBuilds++; } }, 'build-' + a.id);
+const shaderWarmup = createShaderWarmup(async (group) => {
+  if (!renderer.compileAsync) return false; // evita compilação síncrona extra em dispositivos antigos
+  await renderer.compileAsync(group, camera, scene);
+  return true;
+});
+onQuality(() => shaderWarmup.invalidate());
+export function warmArea(a, shaders = true) {
+  if (isBuilt(a)) { if (shaders && G.state !== 'loading') shaderWarmup.request(a); return; }
+  idle(() => {
+    if (!isBuilt(a)) { buildArea(a); streamStats.bgBuilds++; }
+    if (shaders && G.state !== 'loading') shaderWarmup.request(a);
+  }, 'build-' + a.id);
 }
 export function streamAround(a) {
   if (!a) return;
   const keep = new Set([a, ...neighbors(a)]);
   for (const n of keep) warmArea(n);
-  if (!quality.p.stream) { AREAS.forEach(warmArea); return; }
-  for (const x of AREAS) if (!keep.has(x) && isBuilt(x)) { unloadArea(x); streamStats.unloads++; }
+  if (!quality.p.stream) { AREAS.forEach((x) => warmArea(x, false)); return; }
+  for (const x of AREAS) if (!keep.has(x) && isBuilt(x) && !shaderWarmup.isBusy(x)) { unloadArea(x); streamStats.unloads++; }
 }
 // reconstruiu: reaplica estado da campanha que mora nos objetos 3D
 onAreaBuilt((a) => {

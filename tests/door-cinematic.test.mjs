@@ -18,10 +18,10 @@ test('porta abre, personagem atravessa, porta fecha e só troca quando destino e
     const d=doorVectors(side);assert.deepEqual([d.x,d.z],v);assert.ok(Math.abs(Math.sin(d.yaw)-d.x)<1e-9);assert.ok(Math.abs(Math.cos(d.yaw)-d.z)<1e-9);
   }
 });
-function harness({fail=false}={}) {
+function harness({fail=false,slow=false}={}) {
   const code=readFileSync(new URL('../js/director.js',import.meta.url),'utf8');
   const section=code.slice(code.indexOf('function startTransition(door)'),code.indexOf('// ---------- streaming de áreas')).replace('export function skipPassage()', 'function skipPassage()');
-  let prepared=false,enters=0,bonuses=0,callbacks=[],feed=[];
+  let prepared=false,enters=0,bonuses=0,callbacks=[],timeouts=[],feed=[];
   const ref={group:{position:{x:0,z:-20}},gate:{position:{y:0}}};
   const dest={id:'ruinas'},door={id:'N',side:'N',to:'ruinas',toDoor:'S'};
   const pg={position:{x:0,z:-16,set(x,y,z){Object.assign(this,{x,y,z})}},rotation:{y:0},visible:true};
@@ -29,18 +29,25 @@ function harness({fail=false}={}) {
   const c={D,AREA:{ruinas:dest},player:{r:.5,inv:0},pg,G:{state:'play',yaw:0,transitioning:false,cleanStreak:{}},WORLD:{FADE:.4,DOOR_DEPTH:1.6},doorPose,doorVectors,DOOR_TIMING,gateVisible,
     story:{S:{said:new Set()},clearSpeech(){}},passageFor:()=>null,advancePassage:()=>{},clearInput(){},
     sfx:{doorOpen(){},doorClose(){}}, ui:{setFade(){},feed(t){feed.push(t)},hidePassage(){},showPassage(){}},
-    requestAnimationFrame(fn){callbacks.push(fn)},setTimeout(fn){fn()},isBuilt(){return prepared},buildArea(){prepared=true;return 1},streamStats:{syncBuilds:0},
-    safeDoorArrival(){return fail?null:{x:0,z:16,yaw:Math.PI}}, animateDoorWalk(dt,p,yaw){pg.position.set(p.x,0,p.z);pg.rotation.y=yaw},
+    requestAnimationFrame(fn){callbacks.push(fn)},setTimeout(fn,delay){if (delay===2500) timeouts.push(fn); else fn()},isBuilt(){return prepared},buildArea(){prepared=true;return 1},streamStats:{syncBuilds:0},
+    shaderWarmup:{request(){return slow ? new Promise(()=>{}) : Promise.resolve(true)}}, safeDoorArrival(){return fail?null:{x:0,z:16,yaw:Math.PI}}, animateDoorWalk(dt,p,yaw){pg.position.set(p.x,0,p.z);pg.rotation.y=yaw},
     enterArea(){enters++;D.area=dest},finishStreak(){return {bonus:100,kills:3}},addEp(){bonuses++},streamAround(){},console:{error(){}}};
   vm.createContext(c);vm.runInContext(section,c);
-  return {c,D,ref,door,runJobs(){for(const f of callbacks.splice(0))f()},get enters(){return enters},get bonuses(){return bonuses},feed};
+  return {c,D,ref,door,runJobs(){for(const f of callbacks.splice(0))f()},runTimeout(){for(const f of timeouts.splice(0))f()},get enters(){return enters},get bonuses(){return bonuses},feed};
 }
-test('diretor prepara após começar, troca e paga sequência uma única vez',()=>{
+test('diretor prepara após começar, troca e paga sequência uma única vez',async()=>{
   const h=harness();h.c.startTransition(h.door);assert.ok(h.D.trans);assert.equal(h.ref.gate.visible,true);assert.equal(h.enters,0);
   h.c.updateTransition(.2);assert.ok(h.ref.gate.position.y>0);assert.equal(h.D.trans.ready,false);
-  h.runJobs();assert.equal(h.D.trans.ready,true);
+  h.runJobs();await Promise.resolve();assert.equal(h.D.trans.ready,true);
   for(let i=0;i<100&&h.D.trans;i++)h.c.updateTransition(.05);
   assert.equal(h.enters,1);assert.equal(h.bonuses,1);assert.equal(h.D.trans,null);assert.equal(h.c.G.transitioning,false);
+});
+test('compilação lenta não impede passagem após limite de espera',()=>{
+  const h=harness({slow:true});h.c.startTransition(h.door);h.c.updateTransition(.2);h.runJobs();
+  for(let i=0;i<90;i++)h.c.updateTransition(.05);
+  assert.equal(h.enters,0);assert.equal(h.D.trans.ready,false);h.runTimeout();
+  for(let i=0;i<20&&h.D.trans;i++)h.c.updateTransition(.05);
+  assert.equal(h.enters,1);assert.equal(h.bonuses,1);
 });
 test('destino inacessível cancela, fecha portão e restaura personagem',()=>{
   const h=harness({fail:true});h.c.startTransition(h.door);h.c.updateTransition(.2);h.runJobs();h.c.updateTransition(.05);

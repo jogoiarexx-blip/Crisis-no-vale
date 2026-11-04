@@ -16,7 +16,7 @@ import { fire, throwGrenade, updateCombat, clearPickups, pickups, damageEnemy } 
 import { updateSurvivor, hideSurvivor, survivor } from './npc.js';
 import { updateBrandt, hideBrandt, brandt } from './brandt.js';
 import { AREAS, AREA, buildArea, builtCount, isBuilt } from './areas.js';
-import { D, startCampaign, updateDirector, updateHeli, hudData, interact, skipPassage, hasSave, setWinHandler, endStats, currentObjective, debugGoto, debugFlags, warmArea, streamStats, ambienceNow } from './director.js';
+import { D, startCampaign, updateDirector, updateHeli, hudData, interact, skipPassage, hasSave, setWinHandler, endStats, currentObjective, debugGoto, debugFlags, warmArea, streamAround, streamStats, ambienceNow } from './director.js';
 import { readSave } from './state.js';
 import { quality, setQualityMode, autoQualityTick, applyQualityNow, onQuality, MODE_LABEL, PRESETS } from './quality.js';
 import { nextFrame, idleBusy } from './idle.js';
@@ -232,7 +232,7 @@ ui.bindQuality((mode) => {
   setQualityMode(mode); refreshQualityUI();
   document.querySelectorAll('.qsel.first').forEach((q) => { q.classList.remove('first'); q.querySelector('span').textContent = 'QUALIDADE GRÁFICA'; });
   ui.feed(ui.STR.quality(MODE_LABEL[mode] + (mode === 'auto' ? ' → ' + quality.p.label : '')), '#cde');
-  if (!quality.p.stream && D.area) AREAS.forEach(warmArea); // Alto: mantém todas as áreas prontas
+  if (!quality.p.stream && D.area) AREAS.forEach((a) => warmArea(a, false)); // Alto: mantém todas as áreas prontas
 });
 // a predefinição Auto pode baixar sozinha — mantém os botões em dia
 onQuality(() => refreshQualityUI());
@@ -254,7 +254,7 @@ async function boot() {
   const steps = 5; let n = 0;
   const step = async (txt) => { ui.setLoading(n++ / steps, txt); await nextFrame(); };
   applyQualityNow(); refreshQualityUI();
-  if (quality.firstRun) document.querySelectorAll('#menu .qsel').forEach((q) => { q.classList.add('first'); q.querySelector('span').textContent = `PRIMEIRA VEZ? ESCOLHA A QUALIDADE (AUTO DETECTOU: ${quality.p.label.toUpperCase()})`; });
+  if (quality.firstRun) document.querySelectorAll('#menu .quality-select').forEach((q) => { q.classList.add('first'); q.querySelector('span').textContent = `PRIMEIRA VEZ? ESCOLHA A QUALIDADE (AUTO DETECTOU: ${quality.p.label.toUpperCase()})`; });
   await step(`Carregando… qualidade ${quality.p.label}${quality.mode === 'auto' ? ' (auto)' : ''}`);
   await step('Carregando… 1/' + AREAS.length + ' ' + AREA.porto.name.toLowerCase());
   buildArea(AREA.porto);
@@ -276,6 +276,7 @@ async function boot() {
   initPost(renderer, scene, camera);
   loop();
   ui.hideLoading();
+  streamAround(D.area); // inicia shaders dos vizinhos após compilar a área inicial
   // continuar: deixa a área do save pronta em segundo plano
   const sv = readSave(); if (sv && AREA[sv.area]) warmArea(AREA[sv.area]);
   bgStatus();
